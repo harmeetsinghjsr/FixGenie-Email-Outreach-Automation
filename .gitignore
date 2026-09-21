@@ -1,0 +1,30 @@
+# --- Secrets: NEVER commit these ---
+.env
+config/service_account.json
+*.pem
+*.key
+
+# --- Local data / staging DB ---
+data/*.db
+data/*.sqlite
+data/raw_html_cache/
+*.log
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+
+# --- Playwright browser binaries ---
+ms-playwright/
+
+# --- OS / editor ---
+.DS_Store
+.idea/
+.vscode/
+*.swp

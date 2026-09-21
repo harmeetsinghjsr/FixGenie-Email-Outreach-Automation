@@ -1,0 +1,80 @@
+# ===========================================================================
+# Free scheduling via GitHub Actions (2,000 free minutes/month).
+# Runs discovery+enrich+validate+push nightly, and outreach every morning -
+# exactly the cadence suggested in Section 8 of the requirements.
+#
+# SETUP: add these repo secrets (Settings -> Secrets -> Actions):
+#   GOOGLE_SERVICE_ACCOUNT_JSON   (paste the full JSON content)
+#   GOOGLE_SHEET_NAME
+#   GOOGLE_PLACES_API_KEY         (optional)
+#   HUNTER_API_KEY                (optional)
+#   EMAIL_PROVIDER, GMAIL_ADDRESS, GMAIL_APP_PASSWORD  (or BREVO_API_KEY)
+#   SENDER_NAME, SENDER_COMPANY, SENDER_EMAIL, SENDER_POSTAL_ADDRESS
+# ===========================================================================
+name: FixGenie Outreach Pipeline
+
+on:
+  schedule:
+    - cron: "0 6 * * *"    # 06:00 UTC daily: discovery pipeline
+    - cron: "0 14 * * 1-5" # 14:00 UTC weekdays: outreach send
+  workflow_dispatch:        # allow manual runs from the Actions tab
+    inputs:
+      stage:
+        description: "Which stage to run"
+        type: choice
+        options: [discover-pipeline, outreach, run-all]
+        default: discover-pipeline
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -e .
+
+      - name: Write service account file
+        run: |
+          mkdir -p config
+          echo '${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}' > config/service_account.json
+
+      - name: Build .env from secrets
+        run: |
+          cat > .env <<'EOF'
+          GOOGLE_SERVICE_ACCOUNT_JSON=./config/service_account.json
+          GOOGLE_SHEET_NAME=${{ secrets.GOOGLE_SHEET_NAME }}
+          GOOGLE_PLACES_API_KEY=${{ secrets.GOOGLE_PLACES_API_KEY }}
+          HUNTER_API_KEY=${{ secrets.HUNTER_API_KEY }}
+          EMAIL_PROVIDER=${{ secrets.EMAIL_PROVIDER }}
+          GMAIL_ADDRESS=${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD=${{ secrets.GMAIL_APP_PASSWORD }}
+          BREVO_API_KEY=${{ secrets.BREVO_API_KEY }}
+          SENDER_NAME=${{ secrets.SENDER_NAME }}
+          SENDER_COMPANY=${{ secrets.SENDER_COMPANY }}
+          SENDER_EMAIL=${{ secrets.SENDER_EMAIL }}
+          SENDER_POSTAL_ADDRESS=${{ secrets.SENDER_POSTAL_ADDRESS }}
+          EOF
+
+      - name: Run discovery pipeline (nightly)
+        if: github.event.schedule == '0 6 * * *' || github.event.inputs.stage == 'discover-pipeline'
+        run: |
+          python -m fixgenie.cli discover
+          python -m fixgenie.cli enrich
+          python -m fixgenie.cli validate
+          python -m fixgenie.cli push
+
+      - name: Run outreach (weekday mornings)
+        if: github.event.schedule == '0 14 * * 1-5' || github.event.inputs.stage == 'outreach'
+        run: python -m fixgenie.cli outreach
+
+      - name: Run full pipeline (manual)
+        if: github.event.inputs.stage == 'run-all'
+        run: python -m fixgenie.cli run-all --outreach

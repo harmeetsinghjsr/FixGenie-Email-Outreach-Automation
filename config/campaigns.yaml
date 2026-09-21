@@ -1,0 +1,84 @@
+# ===========================================================================
+# FixGenie Campaign Configuration
+# ---------------------------------------------------------------------------
+# This file defines WHO you target and HOW you reach out.
+# Edit this instead of touching code. The pipeline reads it on every run.
+# ===========================================================================
+
+# --- Search targets: each entry is one (industry x location) discovery job ---
+# The discovery stage loops over this list. Add/remove freely.
+targets:
+  - industry: "plumber"
+    city: "Toronto"
+    region: "Ontario"
+    country: "Canada"
+    # Bounding box is auto-resolved from the city name via Overpass geocoding,
+    # but you can pin it manually for precision (south, west, north, east):
+    bbox: null
+    max_results: 60
+
+  - industry: "hair salon"
+    city: "Austin"
+    region: "Texas"
+    country: "USA"
+    bbox: null
+    max_results: 60
+
+  - industry: "restaurant"
+    city: "Vancouver"
+    region: "British Columbia"
+    country: "Canada"
+    bbox: null
+    max_results: 50
+
+# --- Which discovery sources to use, in priority order ---
+# Options: overpass (free, no key), google_places (needs key), directory_scraper
+discovery:
+  sources:
+    - overpass          # always free, run first
+    - google_places     # only runs if GOOGLE_PLACES_API_KEY is set
+  # directory_scraper is opt-in per run via the CLI (--scrape) because it is
+  # slower and carries more ToS risk. Kept out of the default source list.
+  polite_delay_seconds: 2   # delay between Overpass/API calls
+
+# --- Enrichment behavior ---
+enrichment:
+  crawl_website: true       # visit each business site for owner name + email
+  max_pages_per_site: 5     # crawl home + a few likely contact/about pages
+  use_hunter: false         # set true only if HUNTER_API_KEY is present
+  request_timeout: 12
+
+# --- Validation thresholds ---
+validation:
+  require_mx: true          # drop emails whose domain has no mail server
+  # Emails scoring below this are marked "Risky" but still stored (not sent).
+  treat_role_email_as_risky: true   # info@, sales@ etc. -> Risky, per CASL note
+
+# --- De-duplication ---
+dedup:
+  # Two leads are "the same" if fuzzy name score >= this AND same city, OR
+  # they share a phone/email/website domain.
+  name_similarity_threshold: 88
+
+# --- Outreach cadence (a "sequence" of touches) ---
+outreach:
+  enabled: true
+  # Send the first email automatically as soon as a NEW valid lead is stored?
+  # (Section 17 "auto-email-on-storage" behavior.) If false, sending is a
+  # separate manual/scheduled step.
+  auto_send_first_email: false
+  sequence:
+    - step: 1
+      wait_days: 0
+      template: "email_1_intro.j2"
+      subject: "Quick idea for {{ business_name }}"
+    - step: 2
+      wait_days: 3
+      template: "email_2_value.j2"
+      subject: "Re: Quick idea for {{ business_name }}"
+    - step: 3
+      wait_days: 7
+      template: "email_3_breakup.j2"
+      subject: "Should I close the loop, {{ contact_first_name }}?"
+  # Only email leads whose verification status is one of these:
+  send_only_if_status_in: ["Valid"]
