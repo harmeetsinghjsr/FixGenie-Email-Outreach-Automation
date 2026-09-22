@@ -1,41 +1,35 @@
 # ===========================================================================
-# FixGenie - fully automated daily pipeline (GitHub Actions, free tier).
+# FixGenie - automated daily OUTREACH (GitHub Actions, free tier).
 #
-# Once a day it: finds leads -> personalizes (LLM) -> enrich -> validate ->
-# push (to your Google Sheet) -> outreach (sends first emails + follow-ups).
-# Follow-up emails are AI-written too (steps 2 & 3 use per-lead openers).
+# Runs once a day and SENDS: first emails to new Valid leads + follow-ups
+# (steps 2 & 3), then logs everything to the "Outreach Log" tab. It reads
+# whatever leads are already in your Google Sheet.
+#
+# WHY sending-only in the cloud:
+#   Finding leads (Exa) and AI personalization (your LLM gateway) are blocked
+#   from GitHub's datacenter IPs, so those steps are done LOCALLY on your PC:
+#     python scripts/bulk_find.py   ->  python scripts/personalize.py
+#     python -m fixgenie.cli enrich && validate && push
+#   (or use scripts/run_refill.bat). Then the cloud just keeps sending daily.
 #
 # ---- SETUP: add these repo secrets (Settings -> Secrets and variables ->
-#      Actions -> New repository secret) ----
-#   GOOGLE_SERVICE_ACCOUNT_JSON   (paste the FULL contents of service_account.json)
-#   GOOGLE_SHEET_NAME             (e.g. FixGenie Leads Master)
+#      Actions) ----
+#   GOOGLE_SERVICE_ACCOUNT_JSON   (full contents of service_account.json)
+#   GOOGLE_SHEET_NAME
 #   EMAIL_PROVIDER               (brevo)
-#   BREVO_API_KEY                (xkeysib-...)   # or the GMAIL_* pair for gmail
+#   BREVO_API_KEY
 #   SENDER_NAME, SENDER_COMPANY, SENDER_EMAIL, SENDER_POSTAL_ADDRESS
 #   UNSUBSCRIBE_BASE_URL
-#   LLM_BASE_URL, LLM_API_KEY, LLM_MODEL         (for personalization + AI follow-ups)
-#   HUNTER_API_KEY               (optional; leave unset to keep it off)
-#
-# Notes:
-#  - Times are UTC. Change the cron below to your preferred send time.
-#  - Discovery/personalize are best-effort (continue-on-error) so a flaky Exa or
-#    LLM call never blocks the outreach send.
-#  - DAILY_SEND_LIMIT is set to 30 below (matches your warm-up rate).
 # ===========================================================================
-name: FixGenie Daily Pipeline
+name: FixGenie Daily Outreach
 
 on:
   schedule:
-    - cron: "0 13 * * 1-5"   # 13:00 UTC, weekdays. Adjust to your time zone.
-  workflow_dispatch:          # manual "Run workflow" button in the Actions tab
-    inputs:
-      skip_discovery:
-        description: "Only send outreach (skip finding new leads)?"
-        type: boolean
-        default: false
+    - cron: "0 13 * * 1-5"   # 13:00 UTC, weekdays. Change to your time zone.
+  workflow_dispatch:          # manual "Run workflow" button
 
 jobs:
-  pipeline:
+  outreach:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -45,19 +39,10 @@ jobs:
           python-version: "3.11"
           cache: pip
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
       - name: Install Python deps
         run: |
           pip install -r requirements.txt
           pip install -e .
-
-      - name: Install lead-finder tools (mcporter + Exa)
-        run: |
-          npm install -g mcporter
-          mcporter config add exa https://mcp.exa.ai/mcp --scope home
 
       - name: Write Google service-account file
         run: |
@@ -71,7 +56,6 @@ jobs:
           cat > .env <<EOF
           GOOGLE_SERVICE_ACCOUNT_JSON=./config/service_account.json
           GOOGLE_SHEET_NAME=${{ secrets.GOOGLE_SHEET_NAME }}
-          HUNTER_API_KEY=${{ secrets.HUNTER_API_KEY }}
           EMAIL_PROVIDER=${{ secrets.EMAIL_PROVIDER }}
           BREVO_API_KEY=${{ secrets.BREVO_API_KEY }}
           GMAIL_ADDRESS=${{ secrets.GMAIL_ADDRESS }}
@@ -81,31 +65,9 @@ jobs:
           SENDER_EMAIL=${{ secrets.SENDER_EMAIL }}
           SENDER_POSTAL_ADDRESS=${{ secrets.SENDER_POSTAL_ADDRESS }}
           UNSUBSCRIBE_BASE_URL=${{ secrets.UNSUBSCRIBE_BASE_URL }}
-          LLM_BASE_URL=${{ secrets.LLM_BASE_URL }}
-          LLM_API_KEY=${{ secrets.LLM_API_KEY }}
-          LLM_MODEL=${{ secrets.LLM_MODEL }}
-          LLM_USER_AGENT=claude-cli/1.0.60 (external)
           DAILY_SEND_LIMIT=30
           SEND_DELAY_SECONDS=45
           EOF
-
-      - name: Find new leads (best-effort)
-        if: ${{ github.event.inputs.skip_discovery != 'true' }}
-        continue-on-error: true
-        run: python scripts/bulk_find.py --num 5
-
-      - name: Personalize + AI follow-ups (best-effort)
-        if: ${{ github.event.inputs.skip_discovery != 'true' }}
-        continue-on-error: true
-        run: python scripts/personalize.py --delay 0.3
-
-      - name: Enrich, validate, push to Sheet
-        if: ${{ github.event.inputs.skip_discovery != 'true' }}
-        continue-on-error: true
-        run: |
-          python -m fixgenie.cli enrich
-          python -m fixgenie.cli validate
-          python -m fixgenie.cli push
 
       - name: Send outreach + follow-ups
         run: python -m fixgenie.cli outreach
