@@ -3,11 +3,16 @@
 An almost-free, self-hosted system that:
 
 1. **Finds business leads and their email addresses** by searching the web.
-2. **Sends them a polite 3-email sequence automatically**, from your own domain.
+2. **AI-writes and sends a polite 3-email sequence** (intro → follow-up →
+   breakup) from your own domain. Within each run, follow-ups continue
+   automatically for leads who haven't replied, and the sequence stops for
+   anyone who replies, unsubscribes, or bounces.
 3. **Tracks everything in a Google Sheet** that acts as your CRM.
 
-You run a few commands in a terminal. Leads appear in your Google Sheet, and
-emails go out on a schedule you control.
+You run it on your PC with **one command** (`scripts\run_all.bat`): it finds
+leads, personalizes them, pushes to your Sheet, and sends up to your daily cap.
+Run it whenever you like — a few times a week is plenty. (Automatic cloud
+sending is off by design; see [Full automation](#full-automation-github-actions).)
 
 > This README is written so someone who just cloned the repo can go from
 > **zero → sending** without getting stuck. Read it once, top to bottom.
