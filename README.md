@@ -152,8 +152,17 @@ schedule → share the public booking page**, looks like
 `BOOKING_URL` blank to hide the button entirely. Preview it before sending:
 
 ```bash
-BOOKING_URL="https://calendar.app.google/EXAMPLE" python scripts/preview_email.py --step 1 --html
+BOOKING_URL="https://calendly.com/you/15min" python scripts/preview_email.py --step 1 --html
 ```
+
+**Per-lead links.** Each email's button is personalized, not shared: the app
+appends `?name=…&email=…&utm_content=<lead id>` to your `BOOKING_URL`. On
+**Calendly** or **Cal.com** this pre-fills the recipient's details (so they book
+in ~1 click) and tags which lead booked. Google's own Appointment schedule
+ignores these params, so use Calendly/Cal.com if you want the per-lead behavior.
+Once a lead picks a slot, your scheduling tool emails you the chosen time and
+sends both sides the native calendar invite (RSVP + Google Meet link) — you
+don't build that; it's the output of the booking flow.
 
 ### B. Set up the Google Sheet (your CRM)
 
@@ -202,6 +211,13 @@ python -m fixgenie.cli status
 ```
 
 This prints your lead counts and shows which provider + integrations are active.
+
+To prove sending actually works, fire one real email at yourself (renders a real
+sequence step, incl. the booking button; does **not** touch the Sheet):
+
+```bash
+python scripts/test_send.py --to you@example.com
+```
 
 ---
 
@@ -509,6 +525,7 @@ python scripts/clean_rows.py --dry-run        # remove un-emailable, never-conta
 | `python scripts/personalize.py [--limit N]` | LLM-write a clean name + tailored opener per staged lead. Needs `LLM_*` in `.env`. |
 | `python scripts/fill_hooks.py [--dry-run] [--limit N]` | Fill missing AI pitch hooks (W/X/Y) straight into the sheet. Needs `LLM_*` in `.env`. |
 | `python scripts/clean_rows.py [--dry-run]` | Remove un-emailable, never-contacted junk rows from the sheet. Never touches sent or emailable leads. |
+| `python scripts/test_send.py --to X [--step N]` | Send ONE real email to a single address to test sending + the booking button. Never touches the sheet. |
 | `scripts/run_outreach.bat` | Windows batch file that runs `outreach` + logs to `data/outreach_cron.log`. Point Task Scheduler at it. |
 | `fixgenie status` | Show lead counts per stage + which integrations are active. |
 | `fixgenie enrich [--limit N]` | Add contact names / more emails to staged leads. |

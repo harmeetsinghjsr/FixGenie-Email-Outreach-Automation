@@ -35,12 +35,19 @@ Everything runs on your PC with one command (`scripts\run_all.bat`).
 | 13 | **Campaign dashboard** | ✅ Done | `scripts/progress.py` — read-only live stats |
 | 14 | **Sheet maintenance tools** | ✅ Done | `fill_hooks.py` (fill AI hooks), `clean_rows.py` (remove junk rows) |
 | 15 | **Docs / README** | ✅ Done | full setup + command reference in `README.md` |
-| 16 | **Cloud automation** (GitHub Actions) | ⏸️ Off by design | send-only in cloud; find + AI blocked from GitHub IPs → run locally |
+| 16 | **Booking button** (per-lead) | ✅ Done | one-click "book a call" in every email; per-lead Calendly/Cal.com link (pre-fills name/email, tags lead id). Set `BOOKING_URL` to switch on |
+| 17 | **Test-send tool** | ✅ Done | `scripts/test_send.py` — fire one real email at yourself without touching the sheet |
+| 18 | **Cloud automation** (GitHub Actions) | ⏸️ Off by design | send-only in cloud; find + AI blocked from GitHub IPs → run locally |
 
 ---
 
 ## Recently completed
 
+- ✅ Added a **per-lead booking button** (`BOOKING_URL`/`BOOKING_CTA`): styled
+  "book a call" CTA in every email, with each lead's name/email/id baked into the
+  link so Calendly/Cal.com pre-fills their details and tells you who booked.
+- ✅ Added `scripts/test_send.py` to send one real email to any address for
+  end-to-end verification (verified live to a personal inbox via Brevo).
 - ✅ Switched to **PC-only** operation via one command (`run_all.bat`); disabled
   the daily cloud cron (it couldn't find leads or personalize).
 - ✅ Back-filled **AI pitch hooks** for every emailable lead (`fill_hooks.py`).

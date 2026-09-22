@@ -161,11 +161,14 @@ class OutreachEngine:
             self.settings.sender_postal_address,
             unsub,
         )
+        booking_url = compliance.personalized_booking_url(
+            self.settings.booking_url, lead
+        )
         booking_text = compliance.booking_line_text(
-            self.settings.booking_url, self.settings.booking_cta
+            booking_url, self.settings.booking_cta
         )
         booking_html = compliance.booking_button_html(
-            self.settings.booking_url, self.settings.booking_cta
+            booking_url, self.settings.booking_cta
         )
         text_body = body + booking_text + text_footer
         html_body = body.replace("\n", "<br>") + booking_html + html_footer

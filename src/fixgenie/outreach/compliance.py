@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
 from fixgenie.common.logging_setup import get_logger
 
@@ -84,6 +84,40 @@ def legal_footer_text(
         f"You received this one-time message because your business is publicly listed "
         f"and we thought FixGenie could help. If you'd rather not hear from us, "
         f"unsubscribe here: {unsubscribe_url}\n"
+    )
+
+
+def personalized_booking_url(base_url: str, lead) -> str:
+    """
+    Turn the ONE campaign booking link into a per-lead link.
+
+    We keep a single scheduling page (your availability lives there) but append
+    query params so each lead's link is unique and useful:
+      - name / email  -> pre-fill the booking form, so the recipient confirms a
+        slot in ~1 click instead of retyping their details. Calendly and Cal.com
+        both read `name` and `email`; Google's native Appointment schedule does
+        NOT pre-fill (it just ignores them), which is why per-lead needs Calendly
+        or Cal.com.
+      - utm_* + lead id -> so the booking notification / your scheduling tool can
+        tell you WHICH lead booked.
+
+    Returns "" when base_url is unset (button hidden).
+    """
+    if not base_url:
+        return ""
+    extra = {
+        "name": (lead.contact_name or lead.business_name or "").strip(),
+        "email": (lead.email or "").strip(),
+        "utm_source": "fixgenie",
+        "utm_medium": "email",
+        "utm_content": (lead.lead_id or "").strip(),
+    }
+    extra = {k: v for k, v in extra.items() if v}
+    parts = urlsplit(base_url)
+    merged = dict(parse_qsl(parts.query))
+    merged.update(extra)
+    return urlunsplit(
+        (parts.scheme, parts.netloc, parts.path, urlencode(merged), parts.fragment)
     )
 
 
