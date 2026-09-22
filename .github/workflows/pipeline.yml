@@ -24,9 +24,12 @@
 name: FixGenie Daily Outreach
 
 on:
-  schedule:
-    - cron: "0 13 * * 1-5"   # 13:00 UTC, weekdays. Change to your time zone.
-  workflow_dispatch:          # manual "Run workflow" button
+  # Automatic daily sending is OFF. Everything runs on your PC now via
+  # scripts\run_all.bat (find -> AI personalize -> send), so every email is
+  # AI-written. To re-enable cloud auto-send, uncomment the schedule below.
+  # schedule:
+  #   - cron: "0 13 * * 1-5"   # 13:00 UTC, weekdays.
+  workflow_dispatch:          # manual "Run workflow" button only
 
 jobs:
   outreach:
