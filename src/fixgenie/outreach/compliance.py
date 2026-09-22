@@ -89,28 +89,39 @@ def legal_footer_text(
 
 def booking_button_html(url: str, cta: str) -> str:
     """
-    A single, email-client-safe "book a call" button (inline styles only - Gmail
-    and Outlook strip <style> blocks). Sits above the legal footer.
+    A single, email-client-safe "book a call" block (inline styles only - Gmail
+    and Outlook strip <style> blocks). Sits above the legal footer. A short
+    lead-in and sub-line make it read like an instant, no-hassle booking.
     """
     if not url:
         return ""
     label = cta or "Book a call"
     return (
-        '<div style="margin:24px 0;text-align:center">'
+        '<div style="margin:28px 0;text-align:center;'
+        'font-family:Arial,Helvetica,sans-serif">'
+        '<p style="margin:0 0 12px;font-size:14px;color:#444">'
+        'Rather skip the back-and-forth? Grab a time that works for you:</p>'
         f'<a href="{url}" '
         'style="background:#2563eb;color:#ffffff;text-decoration:none;'
-        'font-weight:600;font-size:15px;padding:12px 28px;border-radius:8px;'
-        'display:inline-block;font-family:Arial,Helvetica,sans-serif">'
-        f'\U0001F4C5 {label}</a></div>'
+        'font-weight:700;font-size:16px;padding:14px 32px;border-radius:8px;'
+        'display:inline-block">'
+        f'\U0001F4C5 {label}</a>'
+        '<p style="margin:10px 0 0;font-size:12px;color:#888">'
+        "Pick any open slot &mdash; you'll get an instant calendar invite "
+        'with a video link.</p>'
+        '</div>'
     )
 
 
 def booking_line_text(url: str, cta: str) -> str:
-    """Plain-text equivalent of the booking button (for the text/plain part)."""
+    """Plain-text equivalent of the booking block (for the text/plain part)."""
     if not url:
         return ""
     label = cta or "Book a call"
-    return f"\n\n{label}: {url}\n"
+    return (
+        f"\n\nRather skip the back-and-forth? {label} - pick any open slot and "
+        f"you'll get an instant calendar invite with a video link:\n{url}\n"
+    )
 
 
 def legal_footer_html(
