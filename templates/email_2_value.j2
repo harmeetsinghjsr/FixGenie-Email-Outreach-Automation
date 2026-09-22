@@ -1,0 +1,13 @@
+Hi {{ contact_first_name }},
+
+{% if detail2 %}{{ detail2 }}{% else %}Floating this back to the top of your inbox in case it got buried.{% endif %}
+
+Here's a concrete example of what I mean: for a {% if category %}{{ category|lower }}{% else %}business{% endif %} much like {{ business_name }}, we set up an automation that texted customers their booking reminders and logged every job into one sheet automatically. It quietly saved them 5-6 hours a week of manual follow-up.
+
+I'd be happy to sketch what a similar quick win could look like for {{ business_name }} — no cost, no obligation.
+
+Worth a short call{% if contact_first_name != 'there' %}, {{ contact_first_name }}{% endif %}?
+
+Best,
+{{ sender_name }}
+{{ sender_company }}

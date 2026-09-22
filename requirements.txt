@@ -1,0 +1,82 @@
+# ---------------------------------------------------------------------------
+# FixGenie Outreach System - Python dependencies
+# All packages below are free / open-source. Nothing here requires a paid plan.
+# Install:  pip install -r requirements.txt
+# ---------------------------------------------------------------------------
+
+# --- Core / config ---
+python-dotenv==1.0.1          # Load secrets from .env (never hard-code keys)
+PyYAML==6.0.2                 # Read config/campaigns.yaml
+pydantic==2.9.2               # Validate lead data shape before storage
+
+# --- Discovery ---
+requests==2.32.3              # Overpass API + Google Places API HTTP calls
+playwright==1.47.0            # Headless-browser scraping of public directories
+beautifulsoup4==4.12.3        # Parse HTML from scraper + website enrichment
+lxml==5.3.0                   # Fast parser backend for BeautifulSoup
+
+# --- Enrichment ---
+tldextract==5.1.2             # Clean domain extraction from messy website URLs
+
+# --- Validation ---
+email-validator==2.2.0        # Email syntax + normalization
+dnspython==2.6.1              # MX-record lookup for deliverability check
+phonenumbers==8.13.45         # Google libphonenumber port -> E.164 formatting
+
+# --- De-duplication ---
+rapidfuzz==3.10.1             # Fast fuzzy matching for near-duplicate businesses
+
+# --- Storage ---
+gspread==6.1.4                # Read/write Google Sheets
+google-auth==2.35.0           # Service-account auth for Sheets
+openpyxl==3.1.5               # Read/write .xlsx (import existing scraped leads)
+
+# --- Outreach ---
+Jinja2==3.1.4                 # Personalized email template rendering
+
+# --- CLI / logging ---
+rich==13.9.2                  # Readable colored console logs + tables
+click==8.1.7                  # Clean command-line interface
+
+# ---------------------------------------------------------------------------
+# OPTIONAL (uncomment if you use these providers - still free tiers):
+# sib-api-v3-sdk==7.6.0       # Brevo (Sendinblue) transactional email API
+# ---------------------------------------------------------------------------
+
+
+# ===========================================================================
+# EXTRA TOOLS FOR THE LEAD FINDER  (scripts/exa_leads.py)
+# ---------------------------------------------------------------------------
+# These are NOT Python pip packages, so they are NOT installed by
+# `pip install -r requirements.txt`. They power the Exa web-search lead finder.
+# You install them ONCE. In plain terms:
+#
+#   - Node.js      : a runtime some of the tools need. (Already installed here.)
+#   - agent-reach  : a toolkit that gives the search "eyes on the web".
+#   - mcporter     : the little bridge that lets us call Exa web search.
+#   - Exa          : the actual web-search service (free, no API key needed).
+#
+# ---- One-time install commands (copy-paste in a terminal) ----
+#
+#   # 1. Node.js  (skip if `node --version` already prints a version)
+#   #    Download the LTS installer from https://nodejs.org  and run it.
+#
+#   # 2. agent-reach  (installed into its own isolated folder so it can't
+#   #    clash with this project's Python packages)
+#   python -m venv ~/.agent-reach-venv
+#   ~/.agent-reach-venv/Scripts/python -m pip install \
+#       "https://github.com/Panniantong/agent-reach/archive/main.zip"
+#
+#   # 3. mcporter  (installed globally via Node's package manager)
+#   npm install -g mcporter
+#
+#   # 4. Point mcporter at Exa web search (no key required)
+#   mcporter config add exa https://mcp.exa.ai/mcp --scope home
+#
+# ---- Check it worked ----
+#   mcporter list exa            # should show "exa (2 tools)"
+#
+# Note: `scripts/exa_leads.py` only needs `mcporter` on your PATH. The
+# agent-reach venv (step 2) is optional extra tooling; steps 3-4 are the
+# essential ones for the lead finder.
+# ===========================================================================

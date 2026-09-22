@@ -1,0 +1,133 @@
+{
+  "name": "FixGenie - Discovery to Google Sheet",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            { "field": "cronExpression", "expression": "0 6 * * *" }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Every day 6AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "a1", "name": "industry", "value": "plumber", "type": "string" },
+            { "id": "a2", "name": "city", "value": "Toronto", "type": "string" },
+            { "id": "a3", "name": "country", "value": "Canada", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-params",
+      "name": "Search Params",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://places.googleapis.com/v1/places:searchText",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "X-Goog-Api-Key", "value": "={{ $env.GOOGLE_PLACES_API_KEY }}" },
+            { "name": "X-Goog-FieldMask", "value": "places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.internationalPhoneNumber,places.websiteUri,places.primaryType,places.googleMapsUri" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"textQuery\": \"{{ $json.industry }} in {{ $json.city }}, {{ $json.country }}\",\n  \"pageSize\": 20\n}",
+        "options": {}
+      },
+      "id": "places-search",
+      "name": "Google Places Text Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "places",
+        "options": {}
+      },
+      "id": "split-places",
+      "name": "Split Into Businesses",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [880, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize each place into the FixGenie sheet schema.\nconst out = [];\nfor (const item of $input.all()) {\n  const p = item.json;\n  const name = (p.displayName && p.displayName.text) ? p.displayName.text : '';\n  if (!name) continue;\n  const phone = p.internationalPhoneNumber || p.nationalPhoneNumber || '';\n  out.push({ json: {\n    business_name: name,\n    category: (p.primaryType || $('Search Params').item.json.industry || '').replace(/_/g,' '),\n    email: '',\n    phone: phone,\n    website: p.websiteUri || '',\n    address: p.formattedAddress || '',\n    city_region: $('Search Params').item.json.city,\n    source: 'Google Places',\n    source_url: p.googleMapsUri || '',\n    email_status: 'Unknown',\n    outreach_status: 'Not Contacted'\n  }});\n}\nreturn out;"
+      },
+      "id": "normalize",
+      "name": "Normalize Fields",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "version": 2 },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.business_name }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "notEmpty" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "filter-valid",
+      "name": "Has Business Name?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [1320, 300]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": { "__rl": true, "value": "YOUR_SHEET_ID", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Leads", "mode": "name" },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "matchingColumns": ["business_name"],
+          "value": {}
+        },
+        "options": {}
+      },
+      "id": "append-sheet",
+      "name": "Append to Google Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1540, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": { "id": "REPLACE_WITH_CREDENTIAL_ID", "name": "FixGenie Sheets" }
+      }
+    }
+  ],
+  "connections": {
+    "Every day 6AM": { "main": [[{ "node": "Search Params", "type": "main", "index": 0 }]] },
+    "Search Params": { "main": [[{ "node": "Google Places Text Search", "type": "main", "index": 0 }]] },
+    "Google Places Text Search": { "main": [[{ "node": "Split Into Businesses", "type": "main", "index": 0 }]] },
+    "Split Into Businesses": { "main": [[{ "node": "Normalize Fields", "type": "main", "index": 0 }]] },
+    "Normalize Fields": { "main": [[{ "node": "Has Business Name?", "type": "main", "index": 0 }]] },
+    "Has Business Name?": { "main": [[{ "node": "Append to Google Sheet", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "meta": { "description": "FixGenie discovery workflow: Google Places -> normalize -> Google Sheet. Set GOOGLE_PLACES_API_KEY env var, YOUR_SHEET_ID, and the Sheets credential." }
+}

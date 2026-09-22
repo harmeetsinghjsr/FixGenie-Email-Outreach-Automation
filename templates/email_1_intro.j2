@@ -1,0 +1,12 @@
+Hi {{ contact_first_name }},
+
+{% if detail %}{{ detail }}{% else %}I came across {{ business_name }}{% if city %} in {{ city }}{% endif %} and wanted to reach out.{% endif %}
+
+I'm with {{ sender_company }} — we help {% if category %}{{ category|lower|pluralize }}{% else %}teams{% endif %} cut out the repetitive manual work (booking follow-ups, invoicing, data entry, chasing paperwork) with simple automation, so the day gets spent on {% if city %}clients in {{ city }}{% else %}customers{% endif %} instead of admin.
+
+Most {% if category %}{{ category|lower|pluralize }}{% else %}businesses{% endif %} I talk to are still doing a few of these steps by hand without realizing how much time it quietly eats. Would you be open to a quick 10-minute call to see if there's an easy win for {{ business_name }}?
+
+If the timing's off, no worries at all.
+
+Best,
+{{ sender_name }}

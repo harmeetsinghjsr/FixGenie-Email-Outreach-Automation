@@ -1,0 +1,107 @@
+{
+  "name": "FixGenie - Auto Email on New Lead",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": { "item": [{ "mode": "everyMinute" }] },
+        "documentId": { "__rl": true, "value": "YOUR_SHEET_ID", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Leads", "mode": "name" },
+        "event": "rowAdded",
+        "options": {}
+      },
+      "id": "sheets-trigger",
+      "name": "On New Lead Row",
+      "type": "n8n-nodes-base.googleSheetsTrigger",
+      "typeVersion": 1,
+      "position": [220, 300],
+      "credentials": {
+        "googleSheetsTriggerOAuth2Api": { "id": "REPLACE_WITH_CREDENTIAL_ID", "name": "FixGenie Sheets" }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": false, "version": 2 },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json[\"Email\"] }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "notEmpty" }
+            },
+            {
+              "id": "c2",
+              "leftValue": "={{ $json[\"Email Verification Status\"] }}",
+              "rightValue": "Valid",
+              "operator": { "type": "string", "operation": "equals" }
+            },
+            {
+              "id": "c3",
+              "leftValue": "={{ $json[\"Outreach Status\"] }}",
+              "rightValue": "Not Contacted",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "gate",
+      "name": "Valid + Not Contacted?",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json[\"Email\"] }}",
+        "subject": "=Quick idea for {{ $json[\"Business Name\"] }}",
+        "emailType": "text",
+        "message": "=Hi {{ ($json[\"Contact/Owner Name\"] || \"there\").split(\" \")[0] }},\n\nI came across {{ $json[\"Business Name\"] }} and wanted to reach out. I'm with FixGenie Consulting Inc - we help local businesses automate repetitive manual work so the team spends less time on admin.\n\nWould you be open to a quick 10-minute call to see if there's an easy win for {{ $json[\"Business Name\"] }}?\n\nBest,\nHarmeet Singh\n\n--\nFixGenie Consulting Inc\n123 Example St, Suite 100, Toronto, ON, Canada\nUnsubscribe: https://fixgenie.co/unsubscribe?e={{ $json[\"Email\"] }}",
+        "options": {}
+      },
+      "id": "send-email",
+      "name": "Send Gmail",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [700, 220],
+      "credentials": {
+        "gmailOAuth2": { "id": "REPLACE_WITH_CREDENTIAL_ID", "name": "FixGenie Gmail" }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": { "__rl": true, "value": "YOUR_SHEET_ID", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Leads", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": ["Lead ID"],
+          "value": {
+            "Lead ID": "={{ $json[\"Lead ID\"] }}",
+            "Outreach Status": "Sent",
+            "Last Contacted Date": "={{ $now.toISO() }}",
+            "Auto Email Sent": "TRUE",
+            "Sequence Step": "1"
+          }
+        },
+        "options": {}
+      },
+      "id": "update-status",
+      "name": "Mark as Sent",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [940, 220],
+      "credentials": {
+        "googleSheetsOAuth2Api": { "id": "REPLACE_WITH_CREDENTIAL_ID", "name": "FixGenie Sheets" }
+      }
+    }
+  ],
+  "connections": {
+    "On New Lead Row": { "main": [[{ "node": "Valid + Not Contacted?", "type": "main", "index": 0 }]] },
+    "Valid + Not Contacted?": { "main": [[{ "node": "Send Gmail", "type": "main", "index": 0 }]] },
+    "Send Gmail": { "main": [[{ "node": "Mark as Sent", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "meta": { "description": "Auto-email-on-storage (Section 17 Pattern B / Section 20). Polls the Leads tab; when a Valid + Not Contacted lead appears, sends the first email and marks it Sent. Replace YOUR_SHEET_ID and all credential IDs. Add an Error Trigger workflow for failed sends." }
+}
