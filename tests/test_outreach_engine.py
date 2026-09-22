@@ -22,6 +22,8 @@ class FakeSettings:
     sender_email = "hello@fixgenie.co"
     sender_postal_address = "123 Example St, Toronto, ON"
     unsubscribe_base_url = "https://fixgenie.co/unsubscribe"
+    booking_url = ""
+    booking_cta = "Book a 15-min call"
     daily_send_limit = 40
     send_delay_seconds = 0
     suppression_path = Path("/tmp/fixgenie_test_suppression.txt")

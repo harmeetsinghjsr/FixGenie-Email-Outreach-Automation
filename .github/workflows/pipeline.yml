@@ -68,6 +68,8 @@ jobs:
           SENDER_EMAIL=${{ secrets.SENDER_EMAIL }}
           SENDER_POSTAL_ADDRESS=${{ secrets.SENDER_POSTAL_ADDRESS }}
           UNSUBSCRIBE_BASE_URL=${{ secrets.UNSUBSCRIBE_BASE_URL }}
+          BOOKING_URL=${{ secrets.BOOKING_URL }}
+          BOOKING_CTA=${{ secrets.BOOKING_CTA }}
           DAILY_SEND_LIMIT=30
           SEND_DELAY_SECONDS=45
           EOF

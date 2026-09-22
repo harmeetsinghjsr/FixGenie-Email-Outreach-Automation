@@ -87,6 +87,32 @@ def legal_footer_text(
     )
 
 
+def booking_button_html(url: str, cta: str) -> str:
+    """
+    A single, email-client-safe "book a call" button (inline styles only - Gmail
+    and Outlook strip <style> blocks). Sits above the legal footer.
+    """
+    if not url:
+        return ""
+    label = cta or "Book a call"
+    return (
+        '<div style="margin:24px 0;text-align:center">'
+        f'<a href="{url}" '
+        'style="background:#2563eb;color:#ffffff;text-decoration:none;'
+        'font-weight:600;font-size:15px;padding:12px 28px;border-radius:8px;'
+        'display:inline-block;font-family:Arial,Helvetica,sans-serif">'
+        f'\U0001F4C5 {label}</a></div>'
+    )
+
+
+def booking_line_text(url: str, cta: str) -> str:
+    """Plain-text equivalent of the booking button (for the text/plain part)."""
+    if not url:
+        return ""
+    label = cta or "Book a call"
+    return f"\n\n{label}: {url}\n"
+
+
 def legal_footer_html(
     sender_name: str,
     sender_company: str,

@@ -139,7 +139,21 @@ Then open `.env` and fill in your values. Every key is explained in
 | `SENDER_NAME` / `SENDER_COMPANY` / `SENDER_EMAIL` | your identity in the email footer |
 | `SENDER_POSTAL_ADDRESS` | a **real** postal address (legally required in every email) |
 | `UNSUBSCRIBE_BASE_URL` | where unsubscribe links point |
+| `BOOKING_URL` | optional — a Google Calendar appointment / Calendly / Cal.com link. Set it and every email shows a one-click **book a call** button. Leave blank to hide it. |
+| `BOOKING_CTA` | optional — the button label (default `Book a 15-min call`) |
 | `DAILY_SEND_LIMIT` | max emails per run (start small, e.g. 20–30) |
+
+**Booking button (optional).** Set `BOOKING_URL` to a public scheduling link and
+every email gets a one-click **book a call** button — a styled blue button in the
+HTML part, a labelled link in the plain-text part — so recipients grab a slot
+instead of replying. Get a free link from Google Calendar (**Create → Appointment
+schedule → share the public booking page**, looks like
+`https://calendar.app.google/…`); Calendly / Cal.com links work too. Leave
+`BOOKING_URL` blank to hide the button entirely. Preview it before sending:
+
+```bash
+BOOKING_URL="https://calendar.app.google/EXAMPLE" python scripts/preview_email.py --step 1 --html
+```
 
 ### B. Set up the Google Sheet (your CRM)
 
@@ -425,6 +439,7 @@ to the **Valid** ones — you still find + personalize leads locally first.
    | `SENDER_NAME`, `SENDER_COMPANY`, `SENDER_EMAIL`, `SENDER_POSTAL_ADDRESS` | your identity |
    | `UNSUBSCRIBE_BASE_URL` | your unsubscribe URL |
    | `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL` | your personalization gateway |
+   | `BOOKING_URL`, `BOOKING_CTA` | optional — booking-button link + label (leave unset to hide the button) |
    | `HUNTER_API_KEY` | optional (leave unset to keep Hunter off) |
 
 3. That's it. It runs on the schedule. To run it on demand, use **Actions → FixGenie Daily Pipeline → Run workflow** (there's a checkbox to send only, skipping discovery).

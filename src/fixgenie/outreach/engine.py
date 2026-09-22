@@ -161,8 +161,14 @@ class OutreachEngine:
             self.settings.sender_postal_address,
             unsub,
         )
-        text_body = body + text_footer
-        html_body = body.replace("\n", "<br>") + html_footer
+        booking_text = compliance.booking_line_text(
+            self.settings.booking_url, self.settings.booking_cta
+        )
+        booking_html = compliance.booking_button_html(
+            self.settings.booking_url, self.settings.booking_cta
+        )
+        text_body = body + booking_text + text_footer
+        html_body = body.replace("\n", "<br>") + booking_html + html_footer
         return subject, text_body, html_body
 
     def render(self, lead: Lead, step: SequenceStep) -> tuple[str, str, str]:

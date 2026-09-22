@@ -91,6 +91,14 @@ class Settings:
         default_factory=lambda: _env("UNSUBSCRIBE_BASE_URL", "https://fixgenie.co/unsubscribe")
     )
 
+    # --- Meeting booking CTA (Google Calendar appointment page, Calendly, etc.) ---
+    # If set, every email shows a one-click "book a call" button/link so the
+    # recipient can grab a slot without replying. Leave empty to hide it.
+    booking_url: str = field(default_factory=lambda: _env("BOOKING_URL"))
+    booking_cta: str = field(
+        default_factory=lambda: _env("BOOKING_CTA", "Book a 15-min call")
+    )
+
     # --- Safety limits ---
     daily_send_limit: int = field(default_factory=lambda: _env_int("DAILY_SEND_LIMIT", 40))
     send_delay_seconds: int = field(default_factory=lambda: _env_int("SEND_DELAY_SECONDS", 45))
@@ -122,6 +130,10 @@ class Settings:
     @property
     def has_llm(self) -> bool:
         return bool(self.llm_base_url and self.llm_api_key)
+
+    @property
+    def has_booking(self) -> bool:
+        return bool(self.booking_url)
 
     def resolve_path(self, maybe_relative: str) -> Path:
         """Resolve a path that may be relative to the project root."""
