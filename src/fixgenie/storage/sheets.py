@@ -23,9 +23,13 @@ from fixgenie.common.models import SHEET_COLUMNS, Lead
 
 log = get_logger(__name__)
 
+# Full drive scope is required so gspread can open a spreadsheet *by name* that
+# was created by hand and shared with the service account. The narrower
+# drive.file scope only exposes files the service account created itself, which
+# breaks the documented "share an existing sheet" setup flow.
 _SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive.file",
+    "https://www.googleapis.com/auth/drive",
 ]
 
 LEADS_TAB = "Leads"

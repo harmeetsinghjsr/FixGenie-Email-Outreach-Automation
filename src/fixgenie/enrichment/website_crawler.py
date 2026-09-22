@@ -15,7 +15,7 @@ which is the lowest-risk enrichment path (Section 6).
 from __future__ import annotations
 
 import re
-from typing import Iterable
+from typing import Callable, Iterable
 
 import requests
 from bs4 import BeautifulSoup
@@ -209,8 +209,15 @@ def enrich_leads(
     max_pages: int = 5,
     timeout: int = 12,
     hunter_key: str = "",
+    on_lead: Callable[[Lead], None] | None = None,
 ) -> list[Lead]:
-    """Convenience batch enricher used by the pipeline."""
+    """
+    Convenience batch enricher used by the pipeline.
+
+    `on_lead` is called with each lead as soon as it is enriched. The pipeline
+    uses it to persist progress incrementally, so a crash or Ctrl+C part-way
+    through a long crawl doesn't discard the work already done.
+    """
     crawler = WebsiteCrawler(max_pages=max_pages, timeout=timeout) if crawl_website else None
     hunter = HunterEnricher(hunter_key) if hunter_key else None
     out: list[Lead] = []
@@ -220,4 +227,6 @@ def enrich_leads(
         if hunter and not lead.email:
             lead = hunter.enrich(lead)
         out.append(lead)
+        if on_lead:
+            on_lead(lead)
     return out

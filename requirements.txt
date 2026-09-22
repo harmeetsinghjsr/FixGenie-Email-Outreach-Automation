@@ -42,3 +42,41 @@ click==8.1.7                  # Clean command-line interface
 # OPTIONAL (uncomment if you use these providers - still free tiers):
 # sib-api-v3-sdk==7.6.0       # Brevo (Sendinblue) transactional email API
 # ---------------------------------------------------------------------------
+
+
+# ===========================================================================
+# EXTRA TOOLS FOR THE LEAD FINDER  (scripts/exa_leads.py)
+# ---------------------------------------------------------------------------
+# These are NOT Python pip packages, so they are NOT installed by
+# `pip install -r requirements.txt`. They power the Exa web-search lead finder.
+# You install them ONCE. In plain terms:
+#
+#   - Node.js      : a runtime some of the tools need. (Already installed here.)
+#   - agent-reach  : a toolkit that gives the search "eyes on the web".
+#   - mcporter     : the little bridge that lets us call Exa web search.
+#   - Exa          : the actual web-search service (free, no API key needed).
+#
+# ---- One-time install commands (copy-paste in a terminal) ----
+#
+#   # 1. Node.js  (skip if `node --version` already prints a version)
+#   #    Download the LTS installer from https://nodejs.org  and run it.
+#
+#   # 2. agent-reach  (installed into its own isolated folder so it can't
+#   #    clash with this project's Python packages)
+#   python -m venv ~/.agent-reach-venv
+#   ~/.agent-reach-venv/Scripts/python -m pip install \
+#       "https://github.com/Panniantong/agent-reach/archive/main.zip"
+#
+#   # 3. mcporter  (installed globally via Node's package manager)
+#   npm install -g mcporter
+#
+#   # 4. Point mcporter at Exa web search (no key required)
+#   mcporter config add exa https://mcp.exa.ai/mcp --scope home
+#
+# ---- Check it worked ----
+#   mcporter list exa            # should show "exa (2 tools)"
+#
+# Note: `scripts/exa_leads.py` only needs `mcporter` on your PATH. The
+# agent-reach venv (step 2) is optional extra tooling; steps 3-4 are the
+# essential ones for the lead finder.
+# ===========================================================================

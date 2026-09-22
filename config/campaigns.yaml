@@ -8,28 +8,14 @@
 # --- Search targets: each entry is one (industry x location) discovery job ---
 # The discovery stage loops over this list. Add/remove freely.
 targets:
-  - industry: "plumber"
-    city: "Toronto"
-    region: "Ontario"
-    country: "Canada"
+  - industry: "real estate"
+    city: "Miami"
+    region: "Florida"
+    country: "USA"
     # Bounding box is auto-resolved from the city name via Overpass geocoding,
     # but you can pin it manually for precision (south, west, north, east):
     bbox: null
     max_results: 60
-
-  - industry: "hair salon"
-    city: "Austin"
-    region: "Texas"
-    country: "USA"
-    bbox: null
-    max_results: 60
-
-  - industry: "restaurant"
-    city: "Vancouver"
-    region: "British Columbia"
-    country: "Canada"
-    bbox: null
-    max_results: 50
 
 # --- Which discovery sources to use, in priority order ---
 # Options: overpass (free, no key), google_places (needs key), directory_scraper
@@ -45,7 +31,7 @@ discovery:
 enrichment:
   crawl_website: true       # visit each business site for owner name + email
   max_pages_per_site: 5     # crawl home + a few likely contact/about pages
-  use_hunter: false         # set true only if HUNTER_API_KEY is present
+  use_hunter: true          # HUNTER_API_KEY is set in .env
   request_timeout: 12
 
 # --- Validation thresholds ---

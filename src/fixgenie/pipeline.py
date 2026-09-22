@@ -79,28 +79,33 @@ def stage_discover(db: StagingDB, use_scraper: bool = False) -> int:
     return new_count
 
 
-def stage_enrich(db: StagingDB) -> int:
+def stage_enrich(db: StagingDB, limit: int | None = None) -> int:
     enr_cfg = settings.campaigns.get("enrichment", {})
     leads = db.get_by_stage("new")
+    if limit is not None:
+        leads = leads[:limit]
     if not leads:
         log.info("Nothing to enrich.")
         return 0
+    # Persist each lead as soon as it's done: crawling 300+ sites takes a long
+    # time, and we don't want a crash or Ctrl+C to throw away all the work.
     enriched = enrich_leads(
         leads,
         crawl_website=bool(enr_cfg.get("crawl_website", True)),
         max_pages=int(enr_cfg.get("max_pages_per_site", 5)),
         timeout=int(enr_cfg.get("request_timeout", 12)),
         hunter_key=settings.hunter_api_key if enr_cfg.get("use_hunter") else "",
+        on_lead=lambda lead: db.upsert(lead, stage="enriched"),
     )
-    for lead in enriched:
-        db.upsert(lead, stage="enriched")
     log.info("Enrichment complete: %d leads.", len(enriched))
     return len(enriched)
 
 
-def stage_validate(db: StagingDB) -> int:
+def stage_validate(db: StagingDB, limit: int | None = None) -> int:
     val_cfg = settings.campaigns.get("validation", {})
     leads = db.get_by_stage("enriched")
+    if limit is not None:
+        leads = leads[:limit]
     if not leads:
         log.info("Nothing to validate.")
         return 0
@@ -108,18 +113,19 @@ def stage_validate(db: StagingDB) -> int:
         leads,
         require_mx=bool(val_cfg.get("require_mx", True)),
         role_is_risky=bool(val_cfg.get("treat_role_email_as_risky", True)),
+        on_lead=lambda lead: db.upsert(lead, stage="validated"),
     )
-    for lead in validated:
-        db.upsert(lead, stage="validated")
     log.info("Validation complete: %d leads.", len(validated))
     return len(validated)
 
 
-def stage_push(db: StagingDB) -> int:
+def stage_push(db: StagingDB, limit: int | None = None) -> int:
     """De-dup validated leads against the Sheet, then append the new ones."""
     from fixgenie.storage.sheets import SheetsClient
 
     leads = db.get_by_stage("validated")
+    if limit is not None:
+        leads = leads[:limit]
     if not leads:
         log.info("Nothing to push.")
         return 0
@@ -146,7 +152,7 @@ def stage_push(db: StagingDB) -> int:
     return pushed
 
 
-def stage_outreach(dry_run: bool = False) -> None:
+def stage_outreach(dry_run: bool = False, limit: int | None = None) -> None:
     """Read leads from the Sheet and run the outreach sequence."""
     from fixgenie.outreach.engine import OutreachEngine
     from fixgenie.outreach.senders import build_sender
@@ -162,6 +168,8 @@ def stage_outreach(dry_run: bool = False) -> None:
         settings.google_sheet_name,
     )
     leads = client.load_all()
+    if limit is not None:
+        leads = leads[:limit]
 
     sender = build_sender(settings)
     if not dry_run and not sender.is_configured():
@@ -184,10 +192,16 @@ def stage_outreach(dry_run: bool = False) -> None:
     )
 
 
-def run_all(db: StagingDB, use_scraper: bool = False, outreach: bool = False, dry_run: bool = False) -> None:
+def run_all(
+    db: StagingDB,
+    use_scraper: bool = False,
+    outreach: bool = False,
+    dry_run: bool = False,
+    limit: int | None = None,
+) -> None:
     stage_discover(db, use_scraper=use_scraper)
-    stage_enrich(db)
-    stage_validate(db)
-    stage_push(db)
+    stage_enrich(db, limit=limit)
+    stage_validate(db, limit=limit)
+    stage_push(db, limit=limit)
     if outreach:
-        stage_outreach(dry_run=dry_run)
+        stage_outreach(dry_run=dry_run, limit=limit)

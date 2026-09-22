@@ -17,7 +17,7 @@ Sets Lead.email_status to Valid / Risky / Invalid / Unknown (Section 3, col M).
 """
 from __future__ import annotations
 
-from typing import Iterable
+from typing import Callable, Iterable
 
 from fixgenie.common.logging_setup import get_logger
 from fixgenie.common.models import EmailStatus, Lead
@@ -124,11 +124,20 @@ def validate_leads(
     require_mx: bool = True,
     role_is_risky: bool = True,
     default_region: str = "US",
+    on_lead: Callable[[Lead], None] | None = None,
 ) -> list[Lead]:
-    """Batch validate: email + phone for each lead."""
+    """
+    Batch validate: email + phone for each lead.
+
+    `on_lead` is called with each lead as soon as it is validated, so the
+    pipeline can persist progress incrementally (MX lookups hit DNS and can be
+    slow over a large batch).
+    """
     out: list[Lead] = []
     for lead in leads:
         validate_email(lead, require_mx=require_mx, role_is_risky=role_is_risky)
         validate_phone(lead, default_region=default_region)
         out.append(lead)
+        if on_lead:
+            on_lead(lead)
     return out

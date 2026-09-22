@@ -81,37 +81,45 @@ def import_excel(file_path: str, sheets: tuple[str, ...]) -> None:
 
 
 @cli.command()
-def enrich() -> None:
+@click.option("--limit", type=int, default=None,
+              help="Only process the first N leads (useful for a trial run).")
+def enrich(limit: int | None) -> None:
     """Enrich staged leads (website crawl + optional Hunter.io)."""
     from fixgenie.pipeline import stage_enrich
 
-    stage_enrich(_db())
+    stage_enrich(_db(), limit=limit)
 
 
 @cli.command()
-def validate() -> None:
+@click.option("--limit", type=int, default=None,
+              help="Only process the first N leads (useful for a trial run).")
+def validate(limit: int | None) -> None:
     """Validate emails (syntax + MX) and format phones to E.164."""
     from fixgenie.pipeline import stage_validate
 
-    stage_validate(_db())
+    stage_validate(_db(), limit=limit)
 
 
 @cli.command()
-def push() -> None:
+@click.option("--limit", type=int, default=None,
+              help="Only push the first N leads to the Sheet (useful for a trial run).")
+def push(limit: int | None) -> None:
     """De-duplicate and append clean leads to the Google Sheet."""
     from fixgenie.pipeline import stage_push
 
-    n = stage_push(_db())
+    n = stage_push(_db(), limit=limit)
     console.print(f"[green]Pushed {n} new leads to '{settings.google_sheet_name}'.[/green]")
 
 
 @cli.command()
 @click.option("--dry-run", is_flag=True, help="Render + print emails without sending.")
-def outreach(dry_run: bool) -> None:
+@click.option("--limit", type=int, default=None,
+              help="Only consider the first N leads from the Sheet.")
+def outreach(dry_run: bool, limit: int | None) -> None:
     """Send the outreach sequence to eligible leads in the Sheet."""
     from fixgenie.pipeline import stage_outreach
 
-    stage_outreach(dry_run=dry_run)
+    stage_outreach(dry_run=dry_run, limit=limit)
 
 
 @cli.command()
@@ -128,11 +136,13 @@ def unsubscribe(email: str) -> None:
 @click.option("--scrape", is_flag=True, help="Include the opt-in directory scraper.")
 @click.option("--outreach", "do_outreach", is_flag=True, help="Also run the outreach stage.")
 @click.option("--dry-run", is_flag=True, help="Preview outreach without sending.")
-def run_all_cmd(scrape: bool, do_outreach: bool, dry_run: bool) -> None:
+@click.option("--limit", type=int, default=None,
+              help="Only process the first N leads at each stage.")
+def run_all_cmd(scrape: bool, do_outreach: bool, dry_run: bool, limit: int | None) -> None:
     """Run discover -> enrich -> validate -> push (-> outreach) end to end."""
     from fixgenie.pipeline import run_all
 
-    run_all(_db(), use_scraper=scrape, outreach=do_outreach, dry_run=dry_run)
+    run_all(_db(), use_scraper=scrape, outreach=do_outreach, dry_run=dry_run, limit=limit)
 
 
 if __name__ == "__main__":

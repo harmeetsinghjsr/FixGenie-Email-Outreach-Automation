@@ -4,9 +4,12 @@ config/service_account.json
 *.pem
 *.key
 
-# --- Local data / staging DB ---
+# --- Local data / staging DB / scraped leads (may contain real PII) ---
 data/*.db
 data/*.sqlite
+data/*.xlsx
+data/*.csv
+data/suppression_list.txt
 data/raw_html_cache/
 *.log
 

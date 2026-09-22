@@ -48,6 +48,25 @@ class OutreachResult:
     failed: int = 0
 
 
+def _pluralize(word: str) -> str:
+    """
+    Tidy English plural for the category token in the email copy.
+
+    Naive concatenation ("bakery" + "s") produces "bakerys", and a missing
+    category produced "businesss". This covers the shapes that actually turn up
+    in the target industries.
+    """
+    w = (word or "").strip()
+    if not w:
+        return "businesses"
+    low = w.lower()
+    if low.endswith(("s", "x", "z", "ch", "sh")):
+        return w + "es"
+    if len(low) > 1 and low.endswith("y") and low[-2] not in "aeiou":
+        return w[:-1] + "ies"
+    return w + "s"
+
+
 class OutreachEngine:
     def __init__(
         self,
@@ -66,7 +85,9 @@ class OutreachEngine:
             loader=FileSystemLoader(str(templates_dir)),
             autoescape=select_autoescape(enabled_extensions=("html",)),
         )
+        self._env.filters["pluralize"] = _pluralize
         self._subject_env = Environment(autoescape=False)  # subjects are plain text
+        self._subject_env.filters["pluralize"] = _pluralize
 
     # ------------------------------------------------------------------ #
     def _context(self, lead: Lead) -> dict:
@@ -75,7 +96,7 @@ class OutreachEngine:
             "business_name": lead.business_name,
             "contact_first_name": lead.contact_first_name,
             "contact_name": lead.contact_name,
-            "category": lead.category or "business",
+            "category": lead.category,
             "city": city,
             "sender_name": self.settings.sender_name,
             "sender_company": self.settings.sender_company,
@@ -135,6 +156,16 @@ class OutreachEngine:
         text_body = body + text_footer
         html_body = body.replace("\n", "<br>") + html_footer
         return subject, text_body, html_body
+
+    def render(self, lead: Lead, step: SequenceStep) -> tuple[str, str, str]:
+        """
+        Public render entry point - returns (subject, text_body, html_body)
+        exactly as they would be sent, footer included.
+
+        Used by scripts/preview_email.py and tests so a preview can never drift
+        from what the sender actually puts on the wire.
+        """
+        return self._render(lead, step)
 
     # ------------------------------------------------------------------ #
     def run(

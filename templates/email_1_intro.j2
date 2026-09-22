@@ -2,7 +2,7 @@ Hi {{ contact_first_name }},
 
 I came across {{ business_name }}{% if city %} in {{ city }}{% endif %} and wanted to reach out.
 
-I'm with {{ sender_company }} — we help {{ category|lower }}s and other local businesses cut out repetitive manual work (booking follow-ups, invoicing, data entry) with simple automation, so the team spends less time on admin and more on customers.
+I'm with {{ sender_company }} — we help {% if category %}{{ category|lower|pluralize }} and other local businesses{% else %}local businesses{% endif %} cut out repetitive manual work (booking follow-ups, invoicing, data entry) with simple automation, so the team spends less time on admin and more on customers.
 
 A lot of businesses like yours are still doing these steps by hand without realizing how much time it quietly eats up. Would you be open to a quick 10-minute call to see if there's an easy win here for {{ business_name }}?
 
