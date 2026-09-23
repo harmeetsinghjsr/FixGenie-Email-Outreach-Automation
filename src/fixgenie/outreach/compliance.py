@@ -72,6 +72,21 @@ def unsubscribe_link(base_url: str, email: str) -> str:
     return f"{base_url}?e={quote(email)}&t={token}"
 
 
+def _identity_lines(sender_name: str, sender_company: str) -> list[str]:
+    """
+    Name + company for the footer, de-duplicated.
+
+    When SENDER_NAME and SENDER_COMPANY are the same string (the common case
+    when no personal name is set), show it once instead of printing the company
+    twice. If a distinct personal name is set, both lines are kept.
+    """
+    name = (sender_name or "").strip()
+    company = (sender_company or "").strip()
+    if name and company and name.casefold() == company.casefold():
+        return [name]
+    return [ln for ln in (name, company) if ln]
+
+
 def legal_footer_text(
     sender_name: str,
     sender_company: str,
@@ -79,8 +94,9 @@ def legal_footer_text(
     unsubscribe_url: str,
 ) -> str:
     """Plain-text legal footer appended to every email."""
+    identity = "\n".join(_identity_lines(sender_name, sender_company))
     return (
-        f"\n\n--\n{sender_name}\n{sender_company}\n{postal_address}\n\n"
+        f"\n\n--\n{identity}\n{postal_address}\n\n"
         f"You received this one-time message because your business is publicly listed "
         f"and we thought FixGenie could help. If you'd rather not hear from us, "
         f"unsubscribe here: {unsubscribe_url}\n"
@@ -165,10 +181,11 @@ def legal_footer_html(
     unsubscribe_url: str,
 ) -> str:
     """HTML legal footer (kept minimal - heavy HTML hurts deliverability, Section 21)."""
+    identity = "<br>".join(_identity_lines(sender_name, sender_company))
     return (
         '<hr style="border:none;border-top:1px solid #ddd;margin:24px 0 12px">'
         f'<p style="font-size:12px;color:#888;line-height:1.5">'
-        f"{sender_name}<br>{sender_company}<br>{postal_address}<br><br>"
+        f"{identity}<br>{postal_address}<br><br>"
         "You received this one-time message because your business is publicly "
         "listed and we thought FixGenie could help. "
         f'If you\'d rather not hear from us, <a href="{unsubscribe_url}">unsubscribe here</a>.'
