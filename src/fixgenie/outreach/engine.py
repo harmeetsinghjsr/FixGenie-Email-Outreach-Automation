@@ -148,7 +148,11 @@ class OutreachEngine:
         subject = self._subject_env.from_string(step.subject).render(**ctx)
         body = self._env.get_template(step.template).render(**ctx)
 
-        unsub = compliance.unsubscribe_link(self.settings.unsubscribe_base_url, lead.email)
+        # Visible in-body opt-out is a mailto: to our own inbox - it can never
+        # 404 (the old fixgenie.co/unsubscribe page did, which drove recipients
+        # to "Report spam"). Gmail's one-click button comes from Brevo's
+        # injected List-Unsubscribe header, separately.
+        unsub = compliance.unsubscribe_mailto(self.settings.sender_email, lead.email)
         text_footer = compliance.legal_footer_text(
             self.settings.sender_name,
             self.settings.sender_company,

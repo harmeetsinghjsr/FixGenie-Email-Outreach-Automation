@@ -72,6 +72,22 @@ def unsubscribe_link(base_url: str, email: str) -> str:
     return f"{base_url}?e={quote(email)}&t={token}"
 
 
+def unsubscribe_mailto(to_addr: str, email: str) -> str:
+    """
+    A mailto: opt-out that ALWAYS works (no web endpoint to deploy).
+
+    The visible in-body unsubscribe link must never 404 - a dead link pushes
+    recipients to hit "Report spam", which is what damaged the domain. This
+    points the link at your own inbox with a pre-filled subject/body, so an
+    opt-out is one click + send; you then run `cli unsubscribe --email ...`.
+    Gmail's native one-click button is handled separately by Brevo's injected
+    List-Unsubscribe header.
+    """
+    subject = quote("Unsubscribe")
+    body = quote(f"Please unsubscribe {email} from FixGenie emails.")
+    return f"mailto:{to_addr}?subject={subject}&body={body}"
+
+
 def _identity_lines(sender_name: str, sender_company: str) -> list[str]:
     """
     Name + company for the footer, de-duplicated.
