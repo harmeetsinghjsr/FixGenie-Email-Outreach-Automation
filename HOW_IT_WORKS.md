@@ -264,3 +264,9 @@ FixGenie Email Outreach Automation/
 ---
 
 *Start with `--dry-run` every time you touch a new batch. Preview first, send second.*
+
+*Watch a live run (from the repo folder, in another terminal):*
+
+```powershell
+Get-Content "data\daily_run_*.log" -Wait -Tail 30
+```

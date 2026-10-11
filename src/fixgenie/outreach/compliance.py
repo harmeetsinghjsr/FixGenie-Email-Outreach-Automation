@@ -125,13 +125,11 @@ def personalized_booking_url(base_url: str, lead) -> str:
 
     We keep a single scheduling page (your availability lives there) but append
     query params so each lead's link is unique and useful:
-      - name / email  -> pre-fill the booking form, so the recipient confirms a
-        slot in ~1 click instead of retyping their details. Calendly and Cal.com
-        both read `name` and `email`; Google's native Appointment schedule does
-        NOT pre-fill (it just ignores them), which is why per-lead needs Calendly
-        or Cal.com.
-      - utm_* + lead id -> so the booking notification / your scheduling tool can
-        tell you WHICH lead booked.
+      - name / email  -> pre-fill the booking form when supported (Calendly and
+        Cal.com read these). Google Calendar Appointment schedule ignores them
+        but recipients can still book freely.
+      - utm_* + lead id -> so your scheduling tool's notification can tell you
+        WHICH lead booked (works with any provider).
 
     Returns "" when base_url is unset (button hidden).
     """

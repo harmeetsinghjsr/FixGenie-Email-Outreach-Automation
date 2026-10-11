@@ -10,7 +10,7 @@ Usage:
     python scripts/test_send.py --to you@example.com --step 2
 
 The booking button only appears if BOOKING_URL is set (in .env, or inline:
-    BOOKING_URL="https://calendly.com/you/15min" python scripts/test_send.py --to ...)
+    BOOKING_URL="booking_url" python scripts/test_send.py --to ...)
 """
 from __future__ import annotations
 

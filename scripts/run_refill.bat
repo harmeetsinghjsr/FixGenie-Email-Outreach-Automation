@@ -6,7 +6,7 @@ REM not on GitHub's servers). The cloud job then emails them ~30/day.
 REM Run it whenever you want fresh leads (e.g. once a week), or point Windows
 REM Task Scheduler at it.
 REM ==========================================================================
-cd /d "C:\Users\hs978\CodeSpace\FixGenie\FixGenie Email Outreach Automation"
+cd /d "%~dp0.."
 echo ---- refill started %DATE% %TIME% ---- >> "data\refill.log"
 python scripts\bulk_find.py --num 8            >> "data\refill.log" 2>&1
 python scripts\personalize.py --delay 0.3      >> "data\refill.log" 2>&1

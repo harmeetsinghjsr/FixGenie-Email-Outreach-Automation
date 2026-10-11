@@ -17,6 +17,16 @@ sending is off by design; see [Full automation](#full-automation-github-actions)
 > This README is written so someone who just cloned the repo can go from
 > **zero → sending** without getting stuck. Read it once, top to bottom.
 
+> **Onboarding a new person?** The repo alone is not enough to run — four things
+> are needed, three of which are **not** in the repo (they hold secrets):
+> 1. **`.env`** — copy from the owner, or build from `.env.example` (holds API keys).
+> 2. **`config/service_account.json`** — the Google key file (gitignored; get it from the owner). Sharing the owner's file means you write to the owner's Sheet — usually what you want for a shared CRM.
+> 3. **Python deps** — `pip install -r requirements.txt && pip install -e .`
+> 4. **Exa lead-finder** (per-machine, not carried by `.env`) — `npm install -g mcporter` then `mcporter config add exa https://mcp.exa.ai/mcp --scope home`
+>
+> Then just double-click `scripts\run_all.bat` daily. Full details in
+> [Install](#install) and [Configure](#configure) below.
+
 ---
 
 ## Table of contents
@@ -152,15 +162,16 @@ schedule → share the public booking page**, looks like
 `BOOKING_URL` blank to hide the button entirely. Preview it before sending:
 
 ```bash
-BOOKING_URL="https://calendly.com/you/15min" python scripts/preview_email.py --step 1 --html
+BOOKING_URL="https://calendar.app.google/your/appointment/slot" python scripts/preview_email.py --step 1 --html
 ```
 
-**Per-lead links.** Each email's button is personalized, not shared: the app
-appends `?name=…&email=…&utm_content=<lead id>` to your `BOOKING_URL`. On
-**Calendly** or **Cal.com** this pre-fills the recipient's details (so they book
-in ~1 click) and tags which lead booked. Google's own Appointment schedule
-ignores these params, so use Calendly/Cal.com if you want the per-lead behavior.
-Once a lead picks a slot, your scheduling tool emails you the chosen time and
+**Per-lead links.** Each email's button is personalized: the app appends
+`?name=…&email=…&utm_content=<lead id>` to your `BOOKING_URL`. On **Calendly** or
+**Cal.com** this pre-fills the recipient's details (1-click booking) and tags
+which lead booked. Google Calendar's Appointment schedule ignores these params
+(recipients type their name/email), but the UTM params still tag which lead booked
+via your notification. Either way you get the slot on your calendar and an invite
+sent to both sides. Pick whichever you prefer.
 sends both sides the native calendar invite (RSVP + Google Meet link) — you
 don't build that; it's the output of the booking flow.
 
@@ -370,8 +381,11 @@ weekday morning using the included `scripts/run_outreach.bat` (which also writes
 a local log to `data/outreach_cron.log`):
 
 ```bash
-schtasks /Create /TN "FixGenie Outreach" /TR "\"C:\Users\hs978\CodeSpace\FixGenie\FixGenie Email Outreach Automation\scripts\run_outreach.bat\"" /SC WEEKLY /D MON,TUE,WED,THU,FRI /ST 08:52
+schtasks /Create /TN "FixGenie Outreach" /TR "\"%CD%\scripts\run_outreach.bat\"" /SC WEEKLY /D MON,TUE,WED,THU,FRI /ST 08:52
 ```
+
+(Run that command from the repo folder — `%CD%` fills in your own path. Or
+replace it with the full path to `scripts\run_outreach.bat` on your machine.)
 
 To stop it later: `schtasks /Delete /TN "FixGenie Outreach" /F`.
 
