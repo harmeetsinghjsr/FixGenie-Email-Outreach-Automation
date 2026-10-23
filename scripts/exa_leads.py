@@ -107,18 +107,11 @@ def _clean_name(title: str, website: str) -> str:
     return name
 
 
-# A hook must POSITIVELY describe what the business does (be conservative -
-# a bad hook is worse than none, so we only accept clearly descriptive lines).
-_HOOK_GOOD = re.compile(
-    r"(?i)\b(we (are|specializ|offer|provide|help)|specializ\w* in|family[- ]owned|"
-    r"boutique|full[- ]service|since (19|20)\d\d|luxury|residential and commercial|"
-    r"proudly serv\w+|dedicated to|award[- ]winning)\b"
-)
-# Anything with contact-page / navigation / form language is rejected.
+# Reject contact-page / navigation / form boilerplate — those read terribly quoted.
 _HOOK_BAD = re.compile(
     r"(?i)(@|https?://|\d{3}[\s.-]?\d{3}[\s.-]?\d{4}|\||#|©|fill out|contact form|"
     r"contact us|click here|learn more|request a|below|menu|home page|sign up|"
-    r"subscribe|cookie|privacy|\bFL\s*\d{5})"
+    r"subscribe|cookie|privacy|\bFL\s*\d{5}|\bLLC\b|\bInc\b|\bcorp\b|© 20)"
 )
 
 
@@ -126,22 +119,31 @@ def _pick_hook(block: str, category: str) -> str:
     """
     Pull ONE short, genuinely descriptive sentence about the business.
 
-    Deliberately strict: contact pages are full of "fill out the form" /
-    "contact us" boilerplate that reads terribly in an email, so we only accept
-    a sentence that positively describes the business and has no nav/form/contact
-    language. If nothing qualifies we return "" and the template uses its clean,
-    non-specific fallback (which still reads well).
+    Less strict than before: we accept any sentence that positively describes
+    what the business does (has a verb + something concrete about their work),
+    is the right length, and doesn't contain contact/nav boilerplate. This
+    gives the LLM fresh, specific material to write unique openers from.
     """
     text = block.split("Highlights:", 1)[-1]
-    for raw in re.split(r"(?<=[.!])\s+|\n", text):
+    for raw in re.split(r"(?<=[.!?])\s+", text):
         s = re.sub(r"\s+", " ", raw).strip(" .!-–—")
-        if not (30 <= len(s) <= 160):
+        if not (25 <= len(s) <= 200):
             continue
-        if _HOOK_BAD.search(s) or not _HOOK_GOOD.search(s):
+        # Skip anything with contact/nav/form language
+        if _HOOK_BAD.search(s):
             continue
-        # Keep original casing - the template QUOTES it, so grammar/person
-        # ("we are...") stays correct inside the quotes.
-        return s if s.endswith((".", "!")) else s + "."
+        # Must contain a verb (action word) describing what they do, or a
+        # description of their service/work — not just a label.
+        if not re.search(r"\b(serves|serving|specializ|specializ|focused|dedicated|"
+                         r"providing|offering|help|helping|based|located|headquartered|"
+                         r"handl|deal|manag|work|build|creat|design|develop|run|operat|"
+                         r"represent|assist|support|guide|consult|advise|partner|"
+                         r"team|office|team of|agent|agent[s]?|broker|brokerage)\b", s, re.I):
+            continue
+        # Clean up the snippet - strip trailing nav fragments
+        s = s.split("|")[0].split("©")[0].strip(" .!-–—")
+        if s and len(s) >= 25:
+            return s if s.endswith((".", "!")) else s + "."
     return ""
 
 

@@ -33,39 +33,74 @@ from fixgenie.common.models import Lead, clean_business_name
 from fixgenie.storage.staging_db import StagingDB
 
 _SYSTEM = (
-    "You write concise, genuine cold-email openers for {company}, a firm that helps "
-    "businesses automate repetitive manual work (booking follow-ups, invoicing, data "
-    "entry). You are given messy scraped data about ONE business. Respond with STRICT "
-    "JSON only - no markdown, no commentary."
+    "You write concise, genuine, highly personalized cold-email openers. You are given "
+    "messy scraped data about ONE small business. Your job is to find a unique, specific, "
+    "genuine hook for THAT business — not a generic template. Reference the business's "
+    "actual location, what kind of work they do, or a specific challenge their industry "
+    "faces. NEVER write a boilerplate opener that could apply to any business in that "
+    "category. Each opener must be distinctly different from the others in both wording "
+    "and angle. Use plain, conversational, first-person tone. Respond with STRICT JSON "
+    "only - no markdown, no commentary."
 )
 
-_USER_TEMPLATE = """Business (scraped, may be messy):
-- name: {name}
-- category: {category}
-- city: {city}
-- website: {website}
-- snippet from their site: {snippet}
+_USER_TEMPLATE = """Here is what I found about ONE business I want to write to:
+
+name: {name}
+category: {category}
+address: {address}
+city/region: {city}
+website: {website}
+domain: {domain}
+phone: {phone}
+snippet from their site: {snippet}
+source URL: {source_url}
+
+Your company ({company}) helps small businesses like this one automate repetitive work:
+  - booking follow-ups and appointment reminders
+  - invoicing (creating, sending, chasing, reconciling)
+  - data entry (leads, appointments, payments)
+  - email/SMS sequences that follow up automatically
+  - phone call routing and voicemail → email transcription
+
+CRITICAL: Write THREE openers, each completely different from the others — different
+wording, different angle, different hook. Do NOT sound like a template. Do NOT open
+with "I noticed you're in [city] doing [category]". Find a genuine, specific reason
+to reach out to THIS business. Use plain ASCII only (no smart quotes, no em dashes).
 
 Return JSON exactly like:
 {{"company_name": "...", "opener": "...", "followup": "...", "breakup": "..."}}
 
-Rules:
-- company_name: the real business name, cleaned up (drop "Contact"/"Home"/taglines/
-  duplicate words). If the name is a call-to-action or unclear, infer the brand from
-  the website domain. Keep it short.
-- opener / followup / breakup: each is ONE natural sentence in MY first-person voice,
-  the FIRST line of a 3-email cold sequence to this business:
-    * opener   = email 1, a fresh intro referencing what THIS business does.
-    * followup = email 2 (a few days later), a warm nudge - DIFFERENT wording from
-      the opener, e.g. circling back with a specific angle.
-    * breakup  = email 3 (last one), a low-pressure "I'll close the loop" tone.
-  For all three: no greeting, no sign-off, use category/city/snippet, do NOT invent
-  facts, max 200 characters each, sound human (not salesy/cheesy), and use plain
-  ASCII punctuation only - hyphens or periods, NEVER em dashes or smart/curly quotes.
+company_name rules:
+- The real business name, cleaned up (drop "Contact"/"Home"/taglines/duplicate words).
+- If the name is a call-to-action or unclear, infer the brand from the website domain.
+- Keep it short.
+
+opener rules (email 1, first line):
+- Reference something specific: their exact location, a specific industry quirk, a
+  time-of-year angle, something their competitors probably struggle with, or a
+  detail from their business type that creates a natural hook.
+- Example: "I pass by your Brickell office a lot — real estate teams down here are
+  still chasing listing leads on spreadsheets in 2024?"
+- Do NOT be generic. No "I help businesses automate work" — that goes in the body.
+- Max 220 characters.
+
+followup rules (email 2):
+- DIFFERENT angle from the opener. Don't repeat the same hook.
+- Reference a specific scenario, pain point, or use case relevant to their industry.
+- Example: "Quick question: how much time does your team spend each week manually
+  chasing down signed agreements?"
+- Max 220 characters.
+
+breakup rules (email 3):
+- Low-pressure "I'll close the loop" tone, but specific to them, not generic.
+- Reference their location/industry specifically.
+- Max 220 characters.
 """
 
 
-def _call_llm(name: str, category: str, city: str, website: str, snippet: str) -> dict:
+def _call_llm(name: str, category: str, address: str, city: str,
+            website: str, domain: str, phone: str, snippet: str,
+            source_url: str) -> dict:
     url = settings.llm_base_url.rstrip("/") + "/v1/messages"
     headers = {
         "content-type": "application/json",
@@ -84,8 +119,11 @@ def _call_llm(name: str, category: str, city: str, website: str, snippet: str) -
             "role": "user",
             "content": _USER_TEMPLATE.format(
                 name=name or "(unknown)", category=category or "(unknown)",
-                city=city or "(unknown)", website=website or "(none)",
-                snippet=(snippet or "(none)")[:400],
+                address=address or "(none)", city=city or "(unknown)",
+                website=website or "(none)", domain=domain or "(none)",
+                phone=phone or "(none)", snippet=(snippet or "(none)")[:400],
+                source_url=source_url or "(none)",
+                company=settings.sender_company,
             ),
         }],
     }
@@ -131,8 +169,11 @@ def main() -> None:
             result = None
             for attempt in range(3):  # thinking models occasionally return an empty reply
                 try:
-                    result = _call_llm(lead.business_name, lead.category, city,
-                                       lead.website, lead.raw_snippet)
+                    result = _call_llm(
+                        lead.business_name, lead.category, lead.address, city,
+                        lead.website, lead.domain, lead.phone, lead.raw_snippet,
+                        lead.source_url,
+                    )
                     break
                 except (ValueError, json.JSONDecodeError):
                     if attempt == 2:
