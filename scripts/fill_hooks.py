@@ -65,8 +65,11 @@ def main() -> None:
             result = None
             for attempt in range(3):
                 try:
-                    result = _call_llm(lead.business_name, lead.category, city,
-                                       lead.website, lead.raw_snippet)
+                    result = _call_llm(
+                        lead.business_name, lead.category, lead.address, city,
+                        lead.website, lead.domain, lead.phone, lead.raw_snippet,
+                        lead.source_url,
+                    )
                     break
                 except Exception:  # noqa: BLE001 - retry empty/garbled replies
                     if attempt == 2:
