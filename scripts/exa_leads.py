@@ -148,8 +148,17 @@ def _pick_hook(block: str, category: str) -> str:
 
 
 def _pick_email(block: str) -> str:
+    from urllib.parse import unquote
+
     for m in _EMAIL_RE.findall(block):
         e = m.strip().rstrip(".").lower()
+        # Exa sometimes returns URL-encoded emails (e.g. from mailto: links in
+        # scraped HTML), like "%20info@..." or "info%40domain.com". Decode them
+        # and re-validate against our pattern to drop the encoded artifacts.
+        e = unquote(e)
+        # Re-check that the decoded result is still a clean email address
+        if not re.fullmatch(r"[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}", e):
+            continue
         if _JUNK_EMAIL.search(e):
             continue
         if e.split("@")[-1] in _JUNK_DOMAINS:
