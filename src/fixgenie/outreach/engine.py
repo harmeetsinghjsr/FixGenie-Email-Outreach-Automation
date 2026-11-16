@@ -108,6 +108,11 @@ class OutreachEngine:
             "detail3": (lead.pitch_hook3 or "").strip(),
             "sender_name": self.settings.sender_name,
             "sender_company": self.settings.sender_company,
+            # Sign-off with the name/company de-duped (they are usually the
+            # same string, which used to print the company twice in emails 2/3).
+            "sender_signature": compliance.sender_signature(
+                self.settings.sender_name, self.settings.sender_company
+            ),
         }
 
     def _due_step(self, lead: Lead, send_only_if_status_in: list[str]) -> SequenceStep | None:

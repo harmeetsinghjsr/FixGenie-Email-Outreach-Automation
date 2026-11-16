@@ -103,6 +103,16 @@ def _identity_lines(sender_name: str, sender_company: str) -> list[str]:
     return [ln for ln in (name, company) if ln]
 
 
+def sender_signature(sender_name: str, sender_company: str) -> str:
+    """
+    De-duplicated sign-off for the email body ("Best," is supplied by the template).
+
+    SENDER_NAME and SENDER_COMPANY are often the same string; without this the
+    signature printed the company twice.
+    """
+    return "\n".join(_identity_lines(sender_name, sender_company))
+
+
 def legal_footer_text(
     sender_name: str,
     sender_company: str,
