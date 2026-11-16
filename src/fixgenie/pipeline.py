@@ -12,12 +12,12 @@ from __future__ import annotations
 
 from fixgenie.common.config import settings
 from fixgenie.common.logging_setup import get_logger
-from fixgenie.common.models import Lead
+from fixgenie.common.models import Lead, clean_business_name
 from fixgenie.discovery.base import SearchTarget
 from fixgenie.discovery.overpass_source import OverpassSource
 from fixgenie.discovery.places_source import GooglePlacesSource
 from fixgenie.enrichment.website_crawler import enrich_leads
-from fixgenie.storage.dedup import filter_new_leads
+from fixgenie.storage.dedup import filter_new_leads, is_duplicate
 from fixgenie.storage.staging_db import StagingDB
 from fixgenie.validation.validators import validate_leads
 
@@ -79,6 +79,60 @@ def stage_discover(db: StagingDB, use_scraper: bool = False) -> int:
     return new_count
 
 
+def _dedup_threshold() -> int:
+    return int(settings.campaigns.get("dedup", {}).get("name_similarity_threshold", 88))
+
+
+def drop_known_leads(db: StagingDB, existing: list[Lead], stage: str = "new") -> int:
+    """
+    Move staged leads that already exist in `existing` (the Sheet) to stage
+    'duplicate'. Returns how many were moved.
+
+    Run this BEFORE the expensive steps: push dedups too, but by then the LLM
+    and the crawler have already spent minutes on leads it throws away (one
+    run personalized 441 leads and push then dropped 249 of them).
+
+    Only Sheet rows are compared, not leads within the batch: raw scraped
+    names are often junk ("Contact Us"), and two different businesses sharing
+    one would wrongly collapse. Push still dedups the batch after the LLM has
+    cleaned the names.
+    """
+    leads = db.get_by_stage(stage)
+    if not leads or not existing:
+        return 0
+    threshold = _dedup_threshold()
+    dropped = 0
+    for lead in leads:
+        # Compare on the cleaned name, as Sheet rows hold cleaned names.
+        probe = Lead.from_dict(lead.to_dict())
+        probe.business_name = clean_business_name(lead.business_name) or lead.business_name
+        if any(is_duplicate(probe, e, threshold) for e in existing):
+            db.set_stage(lead.lead_id, "duplicate")
+            dropped += 1
+    return dropped
+
+
+def stage_predupe(db: StagingDB, stage: str = "new") -> int:
+    """
+    Load the Sheet and drop already-known leads from `stage`. Best effort: if
+    the Sheet can't be reached, nothing is dropped and push still dedups.
+    """
+    from fixgenie.storage.sheets import SheetsClient
+
+    try:
+        client = SheetsClient(
+            settings.resolve_path(settings.google_service_account_json),
+            settings.google_sheet_name,
+        )
+        existing = client.load_all()
+    except Exception as exc:  # noqa: BLE001 - optimisation only, never fatal
+        log.warning("Pre-dedup skipped (could not load Sheet: %s); push will still dedup.", exc)
+        return 0
+    dropped = drop_known_leads(db, existing, stage=stage)
+    log.info("Pre-dedup: %d staged leads already in the Sheet, skipped.", dropped)
+    return dropped
+
+
 def stage_enrich(db: StagingDB, limit: int | None = None) -> int:
     enr_cfg = settings.campaigns.get("enrichment", {})
     leads = db.get_by_stage("new")
@@ -130,8 +184,7 @@ def stage_push(db: StagingDB, limit: int | None = None) -> int:
         log.info("Nothing to push.")
         return 0
 
-    dedup_cfg = settings.campaigns.get("dedup", {})
-    threshold = int(dedup_cfg.get("name_similarity_threshold", 88))
+    threshold = _dedup_threshold()
 
     client = SheetsClient(
         settings.resolve_path(settings.google_service_account_json),

@@ -164,6 +164,8 @@ def main() -> None:
     ap.add_argument("--stage", default="new", help="Which staged leads to personalize (default: new).")
     ap.add_argument("--limit", type=int, default=None, help="Only process the first N.")
     ap.add_argument("--delay", type=float, default=0.5, help="Seconds between calls.")
+    ap.add_argument("--no-dedup", action="store_true",
+                    help="Don't skip leads already in the Sheet (push still dedups).")
     args = ap.parse_args()
 
     if not settings.has_llm:
@@ -171,6 +173,13 @@ def main() -> None:
 
     settings.ensure_dirs()
     db = StagingDB(settings.staging_db_path)
+    if not args.no_dedup:
+        # Drop leads the Sheet already has BEFORE paying for LLM calls on them;
+        # they also skip enrich/validate, since those read the same stage.
+        from fixgenie.pipeline import stage_predupe
+
+        skipped = stage_predupe(db, stage=args.stage)
+        print(f"Skipped {skipped} leads already in the Sheet.")
     leads = db.get_by_stage(args.stage)
     # Skip leads with no email - they can't be emailed, so don't spend LLM calls
     # (and don't re-personalize ones that already have an opener).

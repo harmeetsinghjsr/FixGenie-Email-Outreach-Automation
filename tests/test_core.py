@@ -94,6 +94,38 @@ def test_filter_new_leads_respects_existing():
     assert dropped == 1
 
 
+def test_drop_known_leads_skips_sheet_rows_before_personalizing(tmp_path):
+    from fixgenie.pipeline import drop_known_leads
+    from fixgenie.storage.staging_db import StagingDB
+
+    db = StagingDB(tmp_path / "staging.db")
+    known = Lead(business_name="Joes Plumbing Inc", city_region="Toronto, ON")
+    fresh = Lead(business_name="Elite Roofing", city_region="Toronto, ON")
+    # Two different businesses sharing a junk scraped name must both survive:
+    # only Sheet rows are compared, never the batch against itself.
+    junk_a = Lead(business_name="Contact Us", city_region="Austin, TX", phone="+15125550001")
+    junk_b = Lead(business_name="Contact Us", city_region="Austin, TX", phone="+15125550002")
+    for lead in (known, fresh, junk_a, junk_b):
+        db.upsert(lead, stage="new")
+
+    sheet = [Lead(business_name="Joe's Plumbing", city_region="Toronto, ON")]
+    assert drop_known_leads(db, sheet) == 1
+
+    remaining = {l.lead_id for l in db.get_by_stage("new")}
+    assert remaining == {fresh.lead_id, junk_a.lead_id, junk_b.lead_id}
+    assert [l.lead_id for l in db.get_by_stage("duplicate")] == [known.lead_id]
+
+
+def test_drop_known_leads_noop_without_sheet_rows(tmp_path):
+    from fixgenie.pipeline import drop_known_leads
+    from fixgenie.storage.staging_db import StagingDB
+
+    db = StagingDB(tmp_path / "staging.db")
+    db.upsert(Lead(business_name="Elite Roofing", city_region="Toronto, ON"), stage="new")
+    assert drop_known_leads(db, []) == 0
+    assert len(db.get_by_stage("new")) == 1
+
+
 # --------------------------------------------------------------------------- #
 # Enums
 # --------------------------------------------------------------------------- #
