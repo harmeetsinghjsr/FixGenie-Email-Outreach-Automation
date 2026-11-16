@@ -21,12 +21,14 @@ set "LOG=data\daily_run_%STAMP%.log"
 
 echo ==== run_all started %DATE% %TIME% ==== > "%LOG%"
 
-echo [1/5] finding leads...        & python scripts\bulk_find.py --num 8 --count 20 >> "%LOG%" 2>&1
-echo [2/5] AI personalizing...     & python scripts\personalize.py --delay 0.3 >> "%LOG%" 2>&1
-echo [3/5] enriching...            & python -m fixgenie.cli enrich             >> "%LOG%" 2>&1
-echo [4/5] validating + pushing... & python -m fixgenie.cli validate           >> "%LOG%" 2>&1
-                                     python -m fixgenie.cli push               >> "%LOG%" 2>&1
-echo [5/5] sending outreach...     & python -m fixgenie.cli outreach           >> "%LOG%" 2>&1
+REM Each network-bound step is retried on failure. A dropped DNS lookup
+REM mid-run used to abort the whole pipeline and lose that day's sends.
+echo [1/5] finding leads...        & call :step "find"        "python scripts\bulk_find.py --num 8 --count 20"
+echo [2/5] AI personalizing...     & call :step "personalize" "python scripts\personalize.py --delay 0.8"
+echo [3/5] enriching...            & call :step "enrich"      "python -m fixgenie.cli enrich"
+echo [4/5] validating + pushing... & call :step "validate"    "python -m fixgenie.cli validate"
+                                     call :step "push"        "python -m fixgenie.cli push"
+echo [5/5] sending outreach...     & call :step "outreach"    "python -m fixgenie.cli outreach"
 
 echo ==== run_all finished %DATE% %TIME% ==== >> "%LOG%"
 
@@ -37,3 +39,32 @@ echo.
 echo Done. This run's log: %LOG%
 echo (also appended to data\run_all.log)
 pause
+exit /b 0
+
+REM --------------------------------------------------------------------------
+REM Run one pipeline step, retrying up to 3 times so a transient network drop
+REM does not end the run. The whole command goes in ONE quoted argument.
+REM Usage:  call :step "label" "command to run"
+REM --------------------------------------------------------------------------
+:step
+setlocal
+set "LABEL=%~1"
+set "CMD=%~2"
+set /a N=0
+:step_loop
+set /a N+=1
+echo   -- %LABEL% attempt %N%: %CMD% >> "%LOG%"
+cmd /c %CMD% >> "%LOG%" 2>&1
+if errorlevel 1 goto step_failed
+if %N% gtr 1 echo   -- %LABEL% succeeded on attempt %N% >> "%LOG%"
+endlocal & exit /b 0
+:step_failed
+if %N% geq 3 goto step_gave_up
+echo   -- %LABEL% failed (attempt %N%), retrying in 20s >> "%LOG%"
+REM powershell, not timeout.exe: Git Bash's GNU `timeout` shadows it on some
+REM PATHs and rejects the /t flag.
+powershell -NoProfile -Command "Start-Sleep -Seconds 20" > nul
+goto step_loop
+:step_gave_up
+echo   !! %LABEL% FAILED after %N% attempts - continuing to next step >> "%LOG%"
+endlocal & exit /b 1

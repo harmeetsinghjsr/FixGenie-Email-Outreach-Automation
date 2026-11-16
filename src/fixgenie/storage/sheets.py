@@ -15,13 +15,24 @@ Design notes:
 """
 from __future__ import annotations
 
+import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, TypeVar
 
 from fixgenie.common.logging_setup import get_logger
 from fixgenie.common.models import SHEET_COLUMNS, Lead
 
 log = get_logger(__name__)
+
+T = TypeVar("T")
+
+# Network blips (DNS drops, resets) and transient Google errors are common on
+# flaky links and must never kill an otherwise-successful run.
+_RETRY_ATTEMPTS = 4
+_RETRY_BASE_DELAY = 2.0  # seconds; doubles each attempt -> 2, 4, 8
+
+# Permanent configuration errors: never retry, surface them immediately.
+_PERMANENT_ERRORS = (FileNotFoundError, PermissionError, IsADirectoryError, NotADirectoryError)
 
 # Full drive scope is required so gspread can open a spreadsheet *by name* that
 # was created by hand and shared with the service account. The narrower
@@ -35,6 +46,55 @@ _SCOPES = [
 LEADS_TAB = "Leads"
 LOG_TAB = "Outreach Log"
 LOG_COLUMNS = ["Timestamp", "Lead ID", "Business Name", "Email", "Event", "Detail"]
+
+
+def _is_transient(exc: Exception) -> bool:
+    """True if this error is a momentary network/API blip worth retrying."""
+    import socket
+
+    # DNS failures arrive wrapped in all sorts of transport exception types, so
+    # walk the __cause__/__context__ chain looking for the underlying socket error.
+    seen: set[int] = set()
+    cur: BaseException | None = exc
+    while cur is not None and id(cur) not in seen:
+        seen.add(id(cur))
+        # Checked before OSError: FileNotFoundError/PermissionError subclass it,
+        # but "spreadsheet not shared with the service account" is a permanent,
+        # actionable misconfiguration - retrying it just delays the real message.
+        if isinstance(cur, _PERMANENT_ERRORS):
+            return False
+        if isinstance(cur, (socket.gaierror, ConnectionError, TimeoutError, OSError)):
+            return True
+        cur = cur.__cause__ or cur.__context__
+
+    name = type(exc).__name__
+    if name in ("TransportError", "ServerNotFoundError", "ConnectionError"):
+        return True
+
+    # google-api-core / gspread HTTP errors: retry 429 + 5xx only.
+    status = getattr(getattr(exc, "response", None), "status_code", None)
+    if isinstance(status, int):
+        return status == 429 or status >= 500
+
+    return False
+
+
+def _with_retry(label: str, fn: Callable[[], T]) -> T:
+    """Run `fn`, retrying transient network errors with exponential backoff."""
+    delay = _RETRY_BASE_DELAY
+    for attempt in range(1, _RETRY_ATTEMPTS + 1):
+        try:
+            return fn()
+        except Exception as exc:  # noqa: BLE001 - re-raised unless classified transient
+            if attempt == _RETRY_ATTEMPTS or not _is_transient(exc):
+                raise
+            log.warning(
+                "%s failed (attempt %d/%d): %s - retrying in %.0fs",
+                label, attempt, _RETRY_ATTEMPTS, exc, delay,
+            )
+            time.sleep(delay)
+            delay *= 2
+    raise AssertionError("unreachable")
 
 
 class SheetsClient:
@@ -63,8 +123,19 @@ class SheetsClient:
         from google.oauth2.service_account import Credentials
 
         creds = Credentials.from_service_account_file(str(self._sa_path), scopes=_SCOPES)
-        self._gc = gspread.authorize(creds)
-        self._open_or_create()
+        gc = _with_retry("authorize", lambda: gspread.authorize(creds))
+        # Publish connection state only once the whole handshake succeeded: if
+        # _open_or_create() blows up halfway, the next call must reconnect
+        # rather than sail on with a half-built client (self._leads_ws is None).
+        self._gc = gc
+        try:
+            # Wraps opening the spreadsheet AND reading each tab's header row -
+            # all of those hit the network. A missing/unshared file raises
+            # FileNotFoundError, which _is_transient treats as permanent.
+            _with_retry("open workbook", self._open_or_create)
+        except Exception:
+            self._gc = self._spreadsheet = self._leads_ws = self._log_ws = None
+            raise
 
     def _open_or_create(self) -> None:
         import gspread
@@ -102,7 +173,9 @@ class SheetsClient:
     def load_all(self) -> list[Lead]:
         """Read every lead row into Lead objects and build the id->row index."""
         self.connect()
-        records = self._leads_ws.get_all_records()  # list of dicts keyed by header
+        records = _with_retry(
+            "load leads", self._leads_ws.get_all_records
+        )  # list of dicts keyed by header
         leads: list[Lead] = []
         self._id_to_row = {}
         for i, rec in enumerate(records, start=2):  # row 1 = header
@@ -151,7 +224,10 @@ class SheetsClient:
     def append_lead(self, lead: Lead) -> None:
         """Append a brand-new lead row."""
         self.connect()
-        self._leads_ws.append_row(lead.to_sheet_row(), value_input_option="RAW")
+        _with_retry(
+            "append lead",
+            lambda: self._leads_ws.append_row(lead.to_sheet_row(), value_input_option="RAW"),
+        )
         if self._id_to_row is not None:
             # Row index is (existing rows + 1). Cheaper to just invalidate cache.
             self._id_to_row = None
@@ -162,7 +238,10 @@ class SheetsClient:
             return 0
         self.connect()
         rows = [lead.to_sheet_row() for lead in leads]
-        self._leads_ws.append_rows(rows, value_input_option="RAW")
+        _with_retry(
+            "append leads",
+            lambda: self._leads_ws.append_rows(rows, value_input_option="RAW"),
+        )
         self._id_to_row = None
         return len(rows)
 
@@ -176,8 +255,12 @@ class SheetsClient:
             return False
         # Write the full row range A:V in one update call.
         end_col = _col_letter(len(SHEET_COLUMNS))
-        self._leads_ws.update([lead.to_sheet_row()], f"A{row}:{end_col}{row}",
-                              value_input_option="RAW")
+        _with_retry(
+            "update lead",
+            lambda: self._leads_ws.update(
+                [lead.to_sheet_row()], f"A{row}:{end_col}{row}", value_input_option="RAW"
+            ),
+        )
         return True
 
     def log_event(self, lead: Lead, event: str, detail: str = "") -> None:
@@ -185,16 +268,17 @@ class SheetsClient:
         from datetime import datetime, timezone
 
         self.connect()
-        self._log_ws.append_row(
-            [
-                datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                lead.lead_id,
-                lead.business_name,
-                lead.email,
-                event,
-                detail,
-            ],
-            value_input_option="RAW",
+        row = [
+            datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            lead.lead_id,
+            lead.business_name,
+            lead.email,
+            event,
+            detail,
+        ]
+        _with_retry(
+            "log event",
+            lambda: self._log_ws.append_row(row, value_input_option="RAW"),
         )
 
 

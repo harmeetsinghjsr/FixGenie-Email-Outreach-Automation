@@ -32,6 +32,12 @@ from fixgenie.common.config import settings
 from fixgenie.common.models import Lead, clean_business_name
 from fixgenie.storage.staging_db import StagingDB
 
+# The LLM gateway is reached over the public internet; a dropped DNS lookup or
+# reset connection must not silently cost us a lead (a transient blip once
+# failed 171 of 433 leads in a single run).
+_NET_ATTEMPTS = 4
+_NET_BASE_DELAY = 3.0  # seconds; doubles -> 3, 6, 12
+
 _SYSTEM = (
     "You write concise, genuine, highly personalized cold-email openers. You are given "
     "messy scraped data about ONE small business. Your job is to find a unique, specific, "
@@ -127,7 +133,20 @@ def _call_llm(name: str, category: str, address: str, city: str,
             ),
         }],
     }
-    resp = requests.post(url, headers=headers, json=body, timeout=60)
+    # Retry the POST itself: a DNS/connection blip here is transient, while a
+    # 4xx (bad key, bad model) is not and should surface immediately.
+    delay = _NET_BASE_DELAY
+    for attempt in range(1, _NET_ATTEMPTS + 1):
+        try:
+            resp = requests.post(url, headers=headers, json=body, timeout=60)
+            break
+        except (requests.ConnectionError, requests.Timeout) as exc:
+            if attempt == _NET_ATTEMPTS:
+                raise
+            print(f"    LLM network error (attempt {attempt}/{_NET_ATTEMPTS}): "
+                  f"{type(exc).__name__}; retrying in {delay:.0f}s")
+            time.sleep(delay)
+            delay *= 2
     resp.raise_for_status()
     # Decode as UTF-8 explicitly: some gateways omit the charset, and requests'
     # guessed encoding can mangle em dashes/smart quotes into U+FFFD.
