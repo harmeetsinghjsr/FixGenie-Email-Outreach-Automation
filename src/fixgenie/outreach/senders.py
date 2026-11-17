@@ -85,18 +85,54 @@ class BrevoSender(EmailSender):
         }
         if html_body:
             payload["htmlContent"] = html_body
-        try:
-            resp = requests.post(
-                "https://api.brevo.com/v3/smtp/email",
-                headers={"api-key": self.api_key, "Content-Type": "application/json"},
-                json=payload,
-                timeout=20,
-            )
-            if resp.status_code in (200, 201):
-                return True, resp.json().get("messageId", "sent via Brevo")
-            return False, f"Brevo error {resp.status_code}: {resp.text[:200]}"
-        except requests.RequestException as exc:
-            return False, f"Brevo request failed: {exc}"
+        for attempt in range(1, _SEND_ATTEMPTS + 1):
+            try:
+                resp = requests.post(
+                    _BREVO_URL,
+                    headers={"api-key": self.api_key, "Content-Type": "application/json"},
+                    json=payload,
+                    timeout=20,
+                )
+                if resp.status_code in (200, 201):
+                    return True, resp.json().get("messageId", "sent via Brevo")
+                return False, f"Brevo error {resp.status_code}: {resp.text[:200]}"
+            except requests.RequestException as exc:
+                # Retry ONLY when the connection never opened (DNS down, refused):
+                # Brevo can't have received the email. A timeout or a dropped
+                # connection mid-request may already have sent it, and retrying
+                # would email the prospect twice.
+                if attempt == _SEND_ATTEMPTS or not _never_connected(exc):
+                    return False, f"Brevo request failed: {exc}"
+                from fixgenie.common.network import wait_for_network
+
+                log.warning("Brevo unreachable (%s); waiting for network before retrying.",
+                            type(exc).__name__)
+                if not wait_for_network(("api.brevo.com",), max_wait=900, log=log.warning):
+                    return False, f"Brevo request failed: {exc}"
+        return False, "Brevo request failed"  # unreachable
+
+
+_BREVO_URL = "https://api.brevo.com/v3/smtp/email"
+_SEND_ATTEMPTS = 3
+
+
+def _never_connected(exc: BaseException) -> bool:
+    """True if the request failed before a connection to the server was made."""
+    from urllib3.exceptions import NewConnectionError  # NameResolutionError subclasses it
+
+    seen: set[int] = set()
+    cur: BaseException | None = exc
+    while cur is not None and id(cur) not in seen:
+        seen.add(id(cur))
+        if isinstance(cur, NewConnectionError):
+            return True
+        # urllib3's MaxRetryError keeps the real cause in .reason
+        reason = getattr(cur, "reason", None)
+        if isinstance(reason, NewConnectionError):
+            return True
+        nxt = cur.args[0] if cur.args and isinstance(cur.args[0], BaseException) else None
+        cur = nxt or cur.__cause__ or cur.__context__
+    return False
 
 
 def build_sender(settings) -> EmailSender:
