@@ -20,6 +20,7 @@ for /f "delims=" %%i in ('powershell -NoProfile -Command "Get-Date -Format yyyyM
 set "LOG=data\daily_run_%STAMP%.log"
 
 echo ==== run_all started %DATE% %TIME% ==== > "%LOG%"
+set "FAILED="
 
 REM Each network-bound step is retried on failure. A dropped DNS lookup
 REM mid-run used to abort the whole pipeline and lose that day's sends.
@@ -30,20 +31,35 @@ echo [4/5] validating + pushing... & call :step "validate"    "python -m fixgeni
                                      call :step "push"        "python -m fixgenie.cli push"
 echo [5/5] sending outreach...     & call :step "outreach"    "python -m fixgenie.cli outreach"
 
-echo ==== run_all finished %DATE% %TIME% ==== >> "%LOG%"
+if defined FAILED (
+    echo ==== run_all finished WITH ERRORS %DATE% %TIME% - failed:%FAILED% ==== >> "%LOG%"
+) else (
+    echo ==== run_all finished OK %DATE% %TIME% ==== >> "%LOG%"
+)
 
 REM --- keep the master log as the running history ---
 type "%LOG%" >> "data\run_all.log"
 
 echo.
-echo Done. This run's log: %LOG%
+if defined FAILED (
+    echo ************************************************************
+    echo   RUN FINISHED WITH ERRORS. Failed steps:%FAILED%
+    echo %FAILED% | findstr /c:"outreach" > nul && echo   NO EMAILS WERE SENT this run.
+    echo   Details are in the log below. Re-run when the network is stable.
+    echo ************************************************************
+) else (
+    echo All steps succeeded.
+)
+echo This run's log: %LOG%
 echo (also appended to data\run_all.log)
 pause
 exit /b 0
 
 REM --------------------------------------------------------------------------
 REM Run one pipeline step, retrying up to 3 times so a transient network drop
-REM does not end the run. The whole command goes in ONE quoted argument.
+REM does not end the run. Before each attempt it waits (up to 15 min) for DNS
+REM to work again: outages here can last minutes, far longer than retry gaps.
+REM The whole command goes in ONE quoted argument.
 REM Usage:  call :step "label" "command to run"
 REM --------------------------------------------------------------------------
 :step
@@ -53,6 +69,7 @@ set "CMD=%~2"
 set /a N=0
 :step_loop
 set /a N+=1
+python -m fixgenie.common.network --max-wait 900 >> "%LOG%" 2>&1
 echo   -- %LABEL% attempt %N%: %CMD% >> "%LOG%"
 cmd /c %CMD% >> "%LOG%" 2>&1
 if errorlevel 1 goto step_failed
@@ -67,4 +84,5 @@ powershell -NoProfile -Command "Start-Sleep -Seconds 20" > nul
 goto step_loop
 :step_gave_up
 echo   !! %LABEL% FAILED after %N% attempts - continuing to next step >> "%LOG%"
-endlocal & exit /b 1
+echo      !! %LABEL% FAILED after %N% attempts - see log
+endlocal & set "FAILED=%FAILED% %LABEL%" & exit /b 1

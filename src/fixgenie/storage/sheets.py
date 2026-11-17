@@ -94,6 +94,12 @@ def _with_retry(label: str, fn: Callable[[], T]) -> T:
             )
             time.sleep(delay)
             delay *= 2
+            # Outages here often last minutes; if DNS is down, wait for it to
+            # return instead of burning the remaining attempts in seconds.
+            from fixgenie.common.network import is_online, wait_for_network
+
+            if not is_online():
+                wait_for_network(max_wait=900, log=log.warning)
     raise AssertionError("unreachable")
 
 

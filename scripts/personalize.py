@@ -190,12 +190,19 @@ def main() -> None:
         print(f"No un-personalized leads with an email at stage '{args.stage}'.")
         return
 
+    from urllib.parse import urlparse
+
+    from fixgenie.common.network import wait_for_network
+
+    llm_host = urlparse(settings.llm_base_url).hostname or ""
     ok = fail = 0
     for i, lead in enumerate(leads, 1):
         city = lead.city_region.split(",")[0].strip() if lead.city_region else ""
         try:
             result = None
-            for attempt in range(3):  # thinking models occasionally return an empty reply
+            waited = False
+            attempt = 0
+            while True:  # thinking models occasionally return an empty reply
                 try:
                     result = _call_llm(
                         lead.business_name, lead.category, lead.address, city,
@@ -204,9 +211,20 @@ def main() -> None:
                     )
                     break
                 except (ValueError, json.JSONDecodeError):
-                    if attempt == 2:
+                    attempt += 1
+                    if attempt == 3:
                         raise
                     time.sleep(1.0)
+                except (requests.ConnectionError, requests.Timeout):
+                    # _call_llm already retried for ~20s. A longer outage would
+                    # otherwise fail every remaining lead in a few seconds each
+                    # (68 leads lost their opener this way on 17 Nov), so wait
+                    # for the network once per lead, then try it again.
+                    if waited or not llm_host or not wait_for_network(
+                        (llm_host,), max_wait=900, log=lambda m: print(f"    {m}")
+                    ):
+                        raise
+                    waited = True
             company = str(result.get("company_name", "")).strip()
             if company:
                 lead.business_name = company[:80]
