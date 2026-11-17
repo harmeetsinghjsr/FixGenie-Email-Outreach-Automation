@@ -30,31 +30,81 @@ _ROLE_PREFIXES = {
     "noreply",
 }
 
-# Cache MX lookups per domain within a run to avoid repeat DNS queries.
+# Cache conclusive MX lookups per domain within a run to avoid repeat DNS
+# queries. Inconclusive ones (network down) are never cached.
 _mx_cache: dict[str, bool] = {}
 
+# A domain that always has MX records. If even this can't be resolved, the
+# problem is our network/resolver, not the lead's domain.
+_CONTROL_DOMAIN = "gmail.com"
+_control_checked_at = 0.0
+_control_ok = False
 
-def _has_mx(domain: str) -> bool:
-    if domain in _mx_cache:
-        return _mx_cache[domain]
-    ok = False
+
+def _resolver_healthy() -> bool:
+    """True if DNS works right now (checked at most every 30s)."""
+    global _control_checked_at, _control_ok
+    import time
+
+    now = time.monotonic()
+    if now - _control_checked_at < 30:
+        return _control_ok
     try:
         import dns.resolver
 
-        answers = dns.resolver.resolve(domain, "MX")
-        ok = len(answers) > 0
+        _control_ok = len(dns.resolver.resolve(_CONTROL_DOMAIN, "MX", lifetime=8)) > 0
     except Exception:
-        # No MX record, NXDOMAIN, or resolver error -> treat as no mail server.
-        ok = False
-    _mx_cache[domain] = ok
-    return ok
+        _control_ok = False
+    _control_checked_at = now
+    return _control_ok
 
 
-def validate_email(lead: Lead, require_mx: bool = True, role_is_risky: bool = True) -> None:
-    """Set lead.email and lead.email_status in place."""
+def _has_mx(domain: str, attempts: int = 3) -> bool | None:
+    """
+    True  - the domain has MX records.
+    False - it definitely has none (NXDOMAIN / no MX answer, with DNS healthy).
+    None  - couldn't tell: the lookup failed, or DNS itself is down.
+
+    Treating "couldn't tell" as "no mail server" once marked a whole run's
+    leads Invalid during a DNS outage, silently excluding them from outreach.
+    """
+    if domain in _mx_cache:
+        return _mx_cache[domain]
+    import time
+
+    import dns.resolver
+
+    delay = 2.0
+    for attempt in range(1, attempts + 1):
+        try:
+            ok = len(dns.resolver.resolve(domain, "MX", lifetime=8)) > 0
+            _mx_cache[domain] = ok
+            return ok
+        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
+            # Definitive only if the resolver is answering correctly: some
+            # VPN/hotspot setups report NXDOMAIN for everything while offline.
+            if _resolver_healthy():
+                _mx_cache[domain] = False
+                return False
+        except Exception:  # timeout, no nameservers, network down
+            pass
+        if attempt < attempts:
+            time.sleep(delay)
+            delay *= 2
+    return None
+
+
+def validate_email(lead: Lead, require_mx: bool = True, role_is_risky: bool = True) -> bool:
+    """
+    Set lead.email and lead.email_status in place.
+
+    Returns False if the result is inconclusive because the MX lookup could
+    not be completed (network/DNS failure); the lead should be re-validated
+    later rather than stored. Returns True otherwise.
+    """
     if not lead.email:
         lead.email_status = EmailStatus.UNKNOWN.value
-        return
+        return True
 
     from email_validator import EmailNotValidError, validate_email as _ve
 
@@ -66,25 +116,31 @@ def validate_email(lead: Lead, require_mx: bool = True, role_is_risky: bool = Tr
     except EmailNotValidError as exc:
         log.info("Invalid email '%s': %s", lead.email, exc)
         lead.email_status = EmailStatus.INVALID.value
-        return
+        return True
 
     lead.email = normalized
     domain = normalized.split("@", 1)[1]
     prefix = normalized.split("@", 1)[0].split("+")[0]
 
     # MX check.
-    if require_mx and not _has_mx(domain):
-        lead.email_status = EmailStatus.INVALID.value
-        lead.notes = _note(lead, "no MX record for domain")
-        return
+    if require_mx:
+        has_mx = _has_mx(domain)
+        if has_mx is None:
+            lead.email_status = EmailStatus.UNKNOWN.value
+            return False
+        if not has_mx:
+            lead.email_status = EmailStatus.INVALID.value
+            lead.notes = _note(lead, "no MX record for domain")
+            return True
 
     # Role-email downgrade.
     if role_is_risky and prefix in _ROLE_PREFIXES:
         lead.email_status = EmailStatus.RISKY.value
         lead.notes = _note(lead, "role-based email (CASL: treat with care)")
-        return
+        return True
 
     lead.email_status = EmailStatus.VALID.value
+    return True
 
 
 def validate_phone(lead: Lead, default_region: str = "US") -> None:
@@ -132,12 +188,24 @@ def validate_leads(
     `on_lead` is called with each lead as soon as it is validated, so the
     pipeline can persist progress incrementally (MX lookups hit DNS and can be
     slow over a large batch).
+
+    Leads whose MX lookup was inconclusive (DNS/network down) are left out of
+    the result and never passed to `on_lead`, so they stay where they were and
+    get validated again on the next run instead of being stored as Invalid.
     """
     out: list[Lead] = []
+    deferred = 0
     for lead in leads:
-        validate_email(lead, require_mx=require_mx, role_is_risky=role_is_risky)
+        if not validate_email(lead, require_mx=require_mx, role_is_risky=role_is_risky):
+            deferred += 1
+            continue
         validate_phone(lead, default_region=default_region)
         out.append(lead)
         if on_lead:
             on_lead(lead)
+    if deferred:
+        log.warning(
+            "%d leads not validated: MX lookups failed (DNS/network down). "
+            "They stay queued and will be validated on the next run.", deferred,
+        )
     return out
